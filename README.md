@@ -160,7 +160,7 @@ Then open `http://127.0.0.1:8080/Report.html`. Opening the file directly in a br
 - Run `npm run build` inside `frontend/` to produce the static bundle for hosting behind the API.
 - Configure Stripe and SMTP credentials in production to unlock payment reconciliation and email workflows.
 
-## Future Enhancements
+## Future Enhancements can be added
 1. Replace the greedy routing engine with a capacity-constrained VRP solver for higher optimisation accuracy.
 2. Expand automated test coverage beyond analytics to fully exercise billing, scheduling, and routing services.
 3. Introduce background workers for long-running analytics exports and notification batching.
