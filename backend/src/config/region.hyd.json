@@ -1,0 +1,77 @@
+{
+  "city": "Hyderabad",
+  "authority": "Greater Hyderabad Municipal Corporation (GHMC)",
+  "helpline": "040-21111111",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "symbol": "₹",
+  "operations": {
+    "route_threshold": 0.2,
+    "truck_capacity_kg": 3000,
+    "default_depot": {
+      "lat": 17.3850,
+      "lon": 78.4867,
+      "name": "GHMC Central Depot, Khairatabad"
+    },
+    "city_depots": {
+      "Secunderabad": { "lat": 17.4399, "lon": 78.4983, "name": "Secunderabad Zone Depot" },
+      "Kukatpally": { "lat": 17.4849, "lon": 78.4138, "name": "Kukatpally Zone Depot" },
+      "LB Nagar": { "lat": 17.3464, "lon": 78.5524, "name": "LB Nagar Zone Depot" },
+      "Charminar": { "lat": 17.3616, "lon": 78.4747, "name": "Charminar Zone Depot" },
+      "Serilingampally": { "lat": 17.4933, "lon": 78.3260, "name": "Serilingampally Zone Depot" },
+      "Khairatabad": { "lat": 17.4126, "lon": 78.4571, "name": "Khairatabad Zone Depot" }
+    }
+  },
+  "zones": [
+    {
+      "name": "Secunderabad",
+      "code": "SCB",
+      "areaSqKm": 25.4,
+      "population": 520000,
+      "wards": ["Marredpally", "Trimulgherry", "Malkajgiri", "Alwal", "Kapra"]
+    },
+    {
+      "name": "Kukatpally",
+      "code": "KKP",
+      "areaSqKm": 32.1,
+      "population": 680000,
+      "wards": ["KPHB Colony", "Balanagar", "Moosapet", "Nizampet", "Bachupally"]
+    },
+    {
+      "name": "LB Nagar",
+      "code": "LBN",
+      "areaSqKm": 28.7,
+      "population": 610000,
+      "wards": ["Saroornagar", "Vanasthalipuram", "Hayathnagar", "Boduppal", "Nagole"]
+    },
+    {
+      "name": "Charminar",
+      "code": "CHM",
+      "areaSqKm": 19.3,
+      "population": 490000,
+      "wards": ["Falaknuma", "Chandrayangutta", "Santoshnagar", "Rajendranagar", "Golconda"]
+    },
+    {
+      "name": "Serilingampally",
+      "code": "SLP",
+      "areaSqKm": 41.2,
+      "population": 590000,
+      "wards": ["Madhapur", "Gachibowli", "Kondapur", "Miyapur", "Chandanagar"]
+    },
+    {
+      "name": "Khairatabad",
+      "code": "KHB",
+      "areaSqKm": 22.8,
+      "population": 450000,
+      "wards": ["Banjara Hills", "Jubilee Hills", "Panjagutta", "Ameerpet", "Begumpet"]
+    }
+  ],
+  "waste_categories": ["organic", "dry", "hazardous", "e-waste", "construction"],
+  "billing": {
+    "currency": "INR",
+    "tax_label": "GST",
+    "tax_rate": 0.18,
+    "residential_monthly_base": 150,
+    "commercial_monthly_base": 500
+  }
+}
