@@ -10,7 +10,7 @@ Smart Waste hyd is a full-stack proof of concept that helps Sri Lankan municipal
 - **Access Control**: Account registration, login, lockout protection, and role-based dashboards for admins, crews, and residents.
 - **Developer Tooling**: Seed script for realistic demo data, comprehensive backend analytics tests with >95% coverage, and frontend utilities tested with Vitest.
 
-## Architecture
+## Architecture_
 - **Backend** (`backend/`): Node.js (Express 5) REST API, Mongoose 8 ODM, Zod validation, Stripe integration, Nodemailer notifications.
 - **Frontend** (`frontend/`): React 19 + Vite, Tailwind CSS, Material UI 6, React Router 7, React Leaflet for maps, Lucide icons.
 - **Database**: MongoDB Atlas (or any reachable MongoDB deployment) for operational, billing, and analytics data.
