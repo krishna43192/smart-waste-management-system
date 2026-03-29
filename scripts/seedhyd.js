@@ -205,13 +205,13 @@ const makeCollectionRecords = () => {
     const [adminUser, collectorUser, residentUser] = await Promise.all([
       ensureSeedUser({
         name: 'Krishna',
-        email: '24mcmt05@uohyd.ac.in',        // Admin
+        email: 'vamshikrishnamudi@gmail.com',        // Admin
         password: 'Pass@123',
         role: 'admin',
       }),
       ensureSeedUser({
         name: 'Krishna',
-        email: 'vamshikrishnamudi@gmail.com',  // Collector
+        email: '24mcmt05@uohyd.ac.in',  // Collector
         password: 'Pass@123',
         role: 'regular',
       }),
@@ -331,8 +331,8 @@ const makeCollectionRecords = () => {
     console.log('  Smart Waste Hyderabad seed complete!');
     console.log('========================================');
     console.log('\nYour login credentials:');
-    console.log('  Admin     : 24mcmt05@uohyd.ac.in        / Pass@123');
-    console.log('  Collector : vamshikrishnamudi@gmail.com  / Pass@123');
+    console.log('  Admin     : vamshikrishnamudi@gmail.com   / Pass@123');
+    console.log('  Collector : 24mcmt05@uohyd.ac.in  / Pass@123');
     console.log('  Resident  : mudikrishnavamishi@gmail.com / Pass@123');
     console.log('\nData seeded:');
     console.log(`  Zones     : ${CITIES.length}`);
