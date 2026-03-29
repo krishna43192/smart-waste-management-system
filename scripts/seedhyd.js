@@ -201,27 +201,28 @@ const makeCollectionRecords = () => {
       return User.create({ name, email, passwordHash, role });
     };
 
+    // ── ✅ YOUR PERSONAL EMAILS ──
     const [adminUser, collectorUser, residentUser] = await Promise.all([
       ensureSeedUser({
-        name: 'GHMC Admin',
-        email: 'admin@ghmc.gov.in',
-        password: 'Admin@123',
+        name: 'Krishna',
+        email: '24mcmt05@uohyd.ac.in',        // Admin
+        password: 'Pass@123',
         role: 'admin',
       }),
       ensureSeedUser({
-        name: 'Ravi Kumar',
-        email: 'collector@ghmc.gov.in',
-        password: 'Collector@123',
+        name: 'Krishna',
+        email: 'vamshikrishnamudi@gmail.com',  // Collector
+        password: 'Pass@123',
         role: 'regular',
       }),
       ensureSeedUser({
-        name: 'Priya Sharma',
-        email: 'resident@ghmc.gov.in',
-        password: 'Resident@123',
+        name: 'Krishna',
+        email: 'mudikrishnavamishi@gmail.com', // Resident
+        password: 'Pass@123',
         role: 'regular',
       }),
     ]);
-    console.log('✅ Ensured admin, collector, and resident seed users exist');
+    console.log('✅ Ensured admin, collector, and resident users');
 
     // ── Cities / Zones ──
     await City.insertMany(CITIES.map(city => ({
@@ -233,7 +234,7 @@ const makeCollectionRecords = () => {
       population: city.population,
       lastCollectionAt: city.lastCollectionAt,
     })));
-    console.log(`✅ Seeded ${CITIES.length} GHMC zones with depot metadata`);
+    console.log(`✅ Seeded ${CITIES.length} GHMC zones`);
 
     // ── Bins ──
     const binDocs = makeBinRecords();
@@ -243,7 +244,7 @@ const makeCollectionRecords = () => {
     // ── Collection Records ──
     const collectionDocs = makeCollectionRecords();
     await WasteCollectionRecord.insertMany(collectionDocs);
-    console.log(`✅ Seeded ${collectionDocs.length} waste collection records for analytics`);
+    console.log(`✅ Seeded ${collectionDocs.length} waste collection records`);
 
     // ── Bills (INR) ──
     const now = new Date();
@@ -307,9 +308,9 @@ const makeCollectionRecords = () => {
     ];
 
     const insertedBills = await Bill.insertMany(billingDocs);
-    console.log(`✅ Seeded ${billingDocs.length} resident billing records (INR)`);
+    console.log(`✅ Seeded ${billingDocs.length} billing records (INR)`);
 
-    // ── Payment Transaction for paid bill ──
+    // ── Payment Transaction ──
     const paidBill = insertedBills.find(doc => doc.status === 'paid');
     if (paidBill) {
       await PaymentTransaction.create({
@@ -323,21 +324,21 @@ const makeCollectionRecords = () => {
         stripePaymentIntentId: 'seed-intent',
         receiptUrl: 'https://example.com/demo-receipt.pdf',
       });
-      console.log('✅ Seeded historical payment transaction for paid invoice');
+      console.log('✅ Seeded payment transaction for paid invoice');
     }
 
     console.log('\n========================================');
-    console.log('  GHMC Hyderabad seed complete!');
+    console.log('  Smart Waste Hyderabad seed complete!');
     console.log('========================================');
-    console.log('\nDemo accounts:');
-    console.log('  Admin:     admin@ghmc.gov.in     / Admin@123');
-    console.log('  Collector: collector@ghmc.gov.in / Collector@123');
-    console.log('  Resident:  resident@ghmc.gov.in  / Resident@123');
+    console.log('\nYour login credentials:');
+    console.log('  Admin     : 24mcmt05@uohyd.ac.in        / Pass@123');
+    console.log('  Collector : vamshikrishnamudi@gmail.com  / Pass@123');
+    console.log('  Resident  : mudikrishnavamishi@gmail.com / Pass@123');
     console.log('\nData seeded:');
-    console.log(`  Zones        : ${CITIES.length}`);
-    console.log(`  Waste bins   : ${binDocs.length}`);
-    console.log(`  Records      : ${collectionDocs.length}`);
-    console.log(`  Bills (INR)  : ${billingDocs.length}`);
+    console.log(`  Zones     : ${CITIES.length}`);
+    console.log(`  Bins      : ${binDocs.length}`);
+    console.log(`  Records   : ${collectionDocs.length}`);
+    console.log(`  Bills     : ${billingDocs.length}`);
     console.log('========================================\n');
 
   } catch (e) {
