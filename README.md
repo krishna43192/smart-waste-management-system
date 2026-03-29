@@ -11,8 +11,8 @@ Smart Waste Hyderabad is a full-stack proof of concept that helps the Greater Hy
 - **Gamification**: Residents earn points for scheduling pickups and paying bills on time, with a leaderboard to track standings.
 - **Developer Tooling**: Seed script for realistic Hyderabad demo data, comprehensive backend analytics tests with >95% coverage, and frontend utilities tested with Vitest.
 
-## Architecture
-- **Backend** (`backend/`): Node.js (Express 5) REST API, Mongoose 8 ODM, Zod validation, UPI payment integration, Nodemailer notifications.
+## Architecture_
+- **Backend** (`backend/`): Node.js (Express 5) REST API, Mongoose 8 ODM, Zod validation, Stripe integration, Nodemailer notifications.
 - **Frontend** (`frontend/`): React 19 + Vite, Tailwind CSS, Material UI 6, React Router 7, React Leaflet for maps, Lucide icons.
 - **Database**: MongoDB Atlas (or any reachable MongoDB deployment) for operational, billing, and analytics data.
 
