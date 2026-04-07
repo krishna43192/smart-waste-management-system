@@ -13,7 +13,7 @@ import ReportsPage from './pages/Analytics/ReportsPage.jsx'
 import CheckoutResultPage from './pages/Billing/CheckoutResultPage.jsx'
 import SpecialCollectionCheckoutResult from './pages/Schedule/SpecialCollectionCheckoutResult.jsx'
 
-// ✅ ADDED: Gamification imports
+// ✅ Gamification imports
 import PointsDashboard from './pages/Gamification/PointsDashboard.jsx'
 import Leaderboard from './pages/Gamification/Leaderboard.jsx'
 
@@ -21,7 +21,7 @@ const baseNavLinks = [
   { to: '/ops', label: 'Collection Ops', description: 'Plan and monitor routes', icon: MapPinned },
   { to: '/schedule', label: 'Schedule', description: 'Pickup calendar', icon: CalendarClock },
   { to: '/analytics', label: 'Analytics', description: 'Performance dashboards', icon: BarChart3 },
-  // ✅ ADDED: Leaderboard nav link (visible to all logged-in users)
+  // ✅ Leaderboard nav link (visible to all logged-in users)
   { to: '/leaderboard', label: 'Leaderboard', description: 'Top residents & collectors', icon: Trophy },
 ]
 
@@ -29,7 +29,8 @@ function Nav({ session, onSignOut }) {
   const [menuAnchor, setMenuAnchor] = useState(null)
 
   const navLinks = baseNavLinks.filter(link => {
-    if (session?.role === 'admin' && link.to === '/schedule') return false
+    // ✅ FIXED Issue 4: Hide Schedule for both admin AND collector
+    if ((session?.role === 'admin' || session?.role === 'collector') && link.to === '/schedule') return false
     if (link.to === '/analytics') return session?.role === 'admin'
     // Leaderboard visible to all logged-in users
     if (link.to === '/leaderboard') return Boolean(session)
@@ -46,8 +47,21 @@ function Nav({ session, onSignOut }) {
   }
 
   const menuOpen = Boolean(menuAnchor)
-  const dashboardPath = session?.role === 'admin' ? '/adminDashboard' : '/userDashboard'
-  const dashboardLabel = session?.role === 'admin' ? 'Admin dashboard' : 'My dashboard'
+
+  // ✅ FIXED Issue 5: Correct dashboard path for all 3 roles
+  const dashboardPath = session?.role === 'admin'
+    ? '/adminDashboard'
+    : session?.role === 'collector'
+      ? '/ops'
+      : '/userDashboard'
+
+  // ✅ FIXED Issue 5: Correct dashboard label for all 3 roles
+  const dashboardLabel = session?.role === 'admin'
+    ? 'Admin dashboard'
+    : session?.role === 'collector'
+      ? 'Collector ops'
+      : 'My dashboard'
+
   const userInitial = session?.name?.[0]?.toUpperCase() ?? 'S'
 
   const handleMenuOpen = event => setMenuAnchor(event.currentTarget)
@@ -64,7 +78,7 @@ function Nav({ session, onSignOut }) {
             {dashboardLabel}
           </MenuItem>
         ),
-        // ✅ ADDED: My Points link in dropdown menu (residents & collectors only)
+        // ✅ My Points link — residents and collectors only
         session.role !== 'admin' && (
           <MenuItem key="points" component={NavLink} to="/points" onClick={handleMenuClose}>
             <ListItemIcon><Star className="h-4 w-4" /></ListItemIcon>
@@ -251,7 +265,8 @@ function Home() {
               </div>
             ))}
           </div>
-          <p className="mt-6 text-xs text-slate-400">Service window: 04:30 – 18:00 Colombo Time</p>
+          {/* ✅ FIXED Issue 1: Changed Colombo Time to IST Hyderabad */}
+          <p className="mt-6 text-xs text-slate-400">Service window: 05:00 – 20:00 IST (Hyderabad)</p>
         </div>
       </section>
 
@@ -325,7 +340,13 @@ export default function App() {
   const handleSessionInvalid = useCallback(() => setSessionUser(null), [])
 
   const currentYear = new Date().getFullYear()
-  const reroutePath = sessionUser?.role === 'admin' ? '/adminDashboard' : '/userDashboard'
+
+  // ✅ FIXED Issue 2: Correct reroute path for all 3 roles
+  const reroutePath = sessionUser?.role === 'admin'
+    ? '/adminDashboard'
+    : sessionUser?.role === 'collector'
+      ? '/ops'
+      : '/userDashboard'
 
   return (
     <ThemeProvider theme={theme}>
@@ -337,12 +358,17 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/ops" element={<ManageCollectionOpsPage />} />
             <Route path="/collector" element={<Navigate to="/ops#collector-checklist" replace />} />
+
+            {/* ✅ FIXED Issue 3: Schedule only accessible to residents */}
             <Route
               path="/schedule"
-              element={sessionUser
-                ? <SpecialCollectionPage session={sessionUser} onSessionInvalid={handleSessionInvalid} />
-                : <Navigate to="/login" replace />}
+              element={
+                sessionUser?.role === 'resident' || sessionUser?.role === 'regular'
+                  ? <SpecialCollectionPage session={sessionUser} onSessionInvalid={handleSessionInvalid} />
+                  : <Navigate to={sessionUser ? reroutePath : '/login'} replace />
+              }
             />
+
             <Route
               path="/schedule/payment/result"
               element={sessionUser
@@ -362,7 +388,7 @@ export default function App() {
                 : <Navigate to={sessionUser ? '/userDashboard' : '/login'} replace />}
             />
 
-            {/* ✅ ADDED: Gamification routes */}
+            {/* ✅ Gamification routes */}
             <Route
               path="/points"
               element={sessionUser
@@ -414,7 +440,7 @@ export default function App() {
               <Link to="/ops" className="hover:text-slate-700">Operations Control</Link>
               <Link to="/ops#collector-checklist" className="hover:text-slate-700">Field Crew</Link>
               <Link to="/analytics" className="hover:text-slate-700">Insights</Link>
-              {/* ✅ ADDED: Footer links for gamification */}
+              {/* ✅ Footer links for gamification */}
               <Link to="/leaderboard" className="hover:text-slate-700">Leaderboard</Link>
               <Link to="/points" className="hover:text-slate-700">My Points</Link>
             </div>
