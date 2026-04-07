@@ -213,7 +213,7 @@ const makeCollectionRecords = () => {
         name: 'kez',
         email: 'kezevilie23@gmail.com',  // Collector
         password: 'Pass@123',
-        role: 'regular',
+        role: 'collector',
       }),
       ensureSeedUser({
         name: 'Krishna',
