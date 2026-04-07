@@ -210,8 +210,8 @@ const makeCollectionRecords = () => {
         role: 'admin',
       }),
       ensureSeedUser({
-        name: 'Krishna',
-        email: '24mcmt05@uohyd.ac.in',  // Collector
+        name: 'kez',
+        email: 'kezevilie23@gmail.com',  // Collector
         password: 'Pass@123',
         role: 'regular',
       }),
@@ -332,7 +332,7 @@ const makeCollectionRecords = () => {
     console.log('========================================');
     console.log('\nYour login credentials:');
     console.log('  Admin     : vamshikrishnamudi@gmail.com   / Pass@123');
-    console.log('  Collector : 24mcmt05@uohyd.ac.in  / Pass@123');
+    console.log('  Collector : kezevilie23@gmail.com  / Pass@123');
     console.log('  Resident  : mudikrishnavamishi@gmail.com / Pass@123');
     console.log('\nData seeded:');
     console.log(`  Zones     : ${CITIES.length}`);
