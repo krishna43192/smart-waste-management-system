@@ -13,7 +13,7 @@ const paymentSchema = new Schema({
   requestId: { type: Types.ObjectId, ref: 'SpecialCollectionRequest' },
   userId: { type: Types.ObjectId, ref: 'User', required: true },
   amount: { type: Number, required: true, min: 0 },
-  currency: { type: String, default: 'LKR' },
+  currency: { type: String, default: 'INR' },
   status: {
     type: String,
     enum: PAYMENT_STATUSES,
@@ -21,12 +21,15 @@ const paymentSchema = new Schema({
   },
   provider: { type: String, default: 'internal' },
   reference: { type: String },
-  stripeSessionId: { type: String, index: true },
+
+  // ✅ RAZORPAY fields (replaces stripeSessionId)
+  razorpayOrderId: { type: String, index: true },
+  razorpayPaymentId: { type: String },
+
   slotId: { type: String, index: true },
   metadata: { type: Schema.Types.Mixed },
 }, schemaOptions);
 
-// Keeps recent payments per user readily available for audit or resend actions.
 paymentSchema.index({ userId: 1, createdAt: -1 });
 paymentSchema.index({ requestId: 1 });
 

@@ -9,7 +9,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:billing": "jest src/modules/billing",
-  "test:billing:coverage": "jest src/modules/billing --coverage --collectCoverageFrom=\"src/modules/billing/**/*.js\" --collectCoverageFrom=\"src/models/Bill.js\" --collectCoverageFrom=\"src/models/PaymentTransaction.js\"",
+    "test:billing:coverage": "jest src/modules/billing --coverage --collectCoverageFrom=\"src/modules/billing/**/*.js\" --collectCoverageFrom=\"src/models/Bill.js\" --collectCoverageFrom=\"src/models/PaymentTransaction.js\"",
     "test:analytics": "jest src/modules/analytics",
     "test:verbose": "jest --verbose"
   },
@@ -27,7 +27,7 @@
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.15",
     "pdfkit": "^0.15.0",
-    "stripe": "^14.25.0",
+    "razorpay": "^2.9.6",
     "tslib": "^2.6.2",
     "zod": "^4.1.12"
   },

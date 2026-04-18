@@ -13,7 +13,7 @@ const transactionSchema = new Schema({
   billId: { type: Types.ObjectId, ref: 'Bill', required: true, index: true },
   userId: { type: Types.ObjectId, ref: 'User', required: true, index: true },
   amount: { type: Number, required: true, min: 0 },
-  currency: { type: String, default: 'LKR' },
+  currency: { type: String, default: 'INR' },
   paymentMethod: { type: String },
   status: {
     type: String,
@@ -21,8 +21,11 @@ const transactionSchema = new Schema({
     default: TRANSACTION_STATUSES[0],
     index: true,
   },
-  stripeSessionId: { type: String, index: true },
-  stripePaymentIntentId: { type: String },
+
+  // ✅ RAZORPAY fields (replaces Stripe session/intent ids)
+  razorpayOrderId: { type: String, index: true },
+  razorpayPaymentId: { type: String },
+
   receiptUrl: { type: String },
   failureReason: { type: String },
   rawGatewayResponse: { type: Schema.Types.Mixed },

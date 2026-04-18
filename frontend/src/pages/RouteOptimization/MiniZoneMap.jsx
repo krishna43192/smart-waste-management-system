@@ -18,7 +18,8 @@ Fit.propTypes = {
   bbox: PropTypes.array,
 }
 
-const DEFAULT_CENTER = Object.freeze([6.927, 79.861])
+// ✅ FIX 2: Changed default center from Colombo to Hyderabad
+const DEFAULT_CENTER = Object.freeze([17.385, 78.487])
 
 // Quick map overview for toggling between municipal zones.
 function MiniZoneMap({ cities, selectedCity, onSelectCity }) {
@@ -40,10 +41,11 @@ function MiniZoneMap({ cities, selectedCity, onSelectCity }) {
         {cities.map(city => (
           <Rectangle
             key={city.name}
-            bounds={city.bbox || [[city.depot.lat - 0.01, city.depot.lon - 0.01], [city.depot.lat + 0.01, city.depot.lon + 0.01]]}
-            eventHandlers={{
-              click: () => onSelectCity(city.name),
-            }}
+            bounds={city.bbox || [
+              [city.depot.lat - 0.01, city.depot.lon - 0.01],
+              [city.depot.lat + 0.01, city.depot.lon + 0.01],
+            ]}
+            eventHandlers={{ click: () => onSelectCity(city.name) }}
             pathOptions={{
               color: city.name === selectedCity ? '#10b981' : '#64748b',
               weight: 2,

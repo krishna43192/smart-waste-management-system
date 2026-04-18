@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Button, Card, CardContent, Chip, Divider, LinearProgress } from '@mui/material'
+import { Alert, Button, Card, CardContent, Chip, Divider, LinearProgress, Skeleton } from '@mui/material'
 import { Loader2, MapPinned, Share2, FileDown, ShieldCheck, Gauge, Timer, Route as RouteIcon, Truck, Flame, CheckCircle2, AlertTriangle, MapPin } from 'lucide-react'
 import RouteMap from './RouteMap.jsx'
 import ZoneSelector from '../RouteOptimization/ZoneSelector.jsx'
@@ -7,31 +7,56 @@ import MiniZoneMap from '../RouteOptimization/MiniZoneMap.jsx'
 import KpiCard from '../RouteOptimization/KpiCard.jsx'
 import SummaryCard from '../RouteOptimization/SummaryCard.jsx'
 import ProgressSteps from '../RouteOptimization/ProgressSteps.jsx'
+import RouteTimeline from './RouteTimeline.jsx'
 
-// Offline-friendly fallback cities used when the API catalogue is unavailable.
+// ✅ FIX 1: Replaced Colombo/Sri Lanka fallback cities with real Hyderabad zones
 const FALLBACK_CITIES = [
   {
-    name: 'Homagama',
-    depot: { lat: 6.8442, lon: 80.0031 },
-    bbox: [[6.8200, 79.9500], [6.9000, 80.0400]],
-    areaSqKm: 13.6,
-    population: 91000,
+    name: 'Secunderabad',
+    depot: { lat: 17.440, lon: 78.498 },
+    bbox: [[17.410, 78.460], [17.480, 78.540]],
+    areaSqKm: 25.4,
+    population: 520000,
     lastCollectionAt: null,
   },
   {
-    name: 'Borella',
-    depot: { lat: 6.9147, lon: 79.8733 },
-    bbox: [[6.9000, 79.8600], [6.9350, 79.9000]],
-    areaSqKm: 9.4,
-    population: 118000,
+    name: 'LB Nagar',
+    depot: { lat: 17.347, lon: 78.552 },
+    bbox: [[17.320, 78.520], [17.380, 78.590]],
+    areaSqKm: 18.2,
+    population: 410000,
     lastCollectionAt: null,
   },
   {
-    name: 'Rajagiriya',
-    depot: { lat: 6.9105, lon: 79.8875 },
-    bbox: [[6.8950, 79.8700], [6.9400, 79.9200]],
-    areaSqKm: 7.8,
-    population: 76000,
+    name: 'Kukatpally',
+    depot: { lat: 17.494, lon: 78.395 },
+    bbox: [[17.460, 78.360], [17.530, 78.430]],
+    areaSqKm: 21.7,
+    population: 480000,
+    lastCollectionAt: null,
+  },
+  {
+    name: 'Uppal',
+    depot: { lat: 17.405, lon: 78.559 },
+    bbox: [[17.375, 78.525], [17.435, 78.595]],
+    areaSqKm: 16.8,
+    population: 360000,
+    lastCollectionAt: null,
+  },
+  {
+    name: 'Miyapur',
+    depot: { lat: 17.496, lon: 78.357 },
+    bbox: [[17.465, 78.325], [17.525, 78.390]],
+    areaSqKm: 14.3,
+    population: 295000,
+    lastCollectionAt: null,
+  },
+  {
+    name: 'Dilsukhnagar',
+    depot: { lat: 17.369, lon: 78.526 },
+    bbox: [[17.340, 78.495], [17.400, 78.560]],
+    areaSqKm: 12.6,
+    population: 320000,
     lastCollectionAt: null,
   },
 ]
@@ -60,16 +85,13 @@ const INITIAL_SUMMARY_METRICS = {
   fleetSize: null,
   engagedTrucks: null,
   totalBins: null,
+  // ✅ FIX 5: Added serviceLevel for dynamic chip
+  serviceLevel: 'normal',
 }
 
-// Produce a progress step array with updated status values for the UI timeline.
 const createProgressState = (activeIndex = -1, status = 'idle') => PROGRESS_TEMPLATE.map((step, index) => {
-  if (status === 'done') {
-    return { ...step, status: 'done' }
-  }
-  if (activeIndex === -1) {
-    return { ...step, status: 'idle' }
-  }
+  if (status === 'done') return { ...step, status: 'done' }
+  if (activeIndex === -1) return { ...step, status: 'idle' }
   return { ...step, status: index === activeIndex ? 'active' : index < activeIndex ? 'done' : 'idle' }
 })
 
@@ -81,9 +103,7 @@ const formatDateLabel = value => {
 }
 
 const formatMetric = value => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value.toLocaleString()
-  }
+  if (typeof value === 'number' && Number.isFinite(value)) return value.toLocaleString()
   return '—'
 }
 
@@ -128,7 +148,6 @@ const buildCollectionOpsReport = ({
   return { filename, content }
 }
 
-// Coordinates the end-to-end optimization workflow for operations managers.
 export default function ManageCollectionOpsPage() {
   const [cities, setCities] = useState([])
   const [city, setCity] = useState('')
@@ -138,6 +157,7 @@ export default function ManageCollectionOpsPage() {
   const [zoneDetails, setZoneDetails] = useState(INITIAL_ZONE_DETAILS)
   const [progressSteps, setProgressSteps] = useState(createProgressState())
   const [loading, setLoading] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(true) // ✅ FIX 3: Track summary loading state
   const [planFetching, setPlanFetching] = useState(false)
   const [error, setError] = useState('')
   const [lastOptimizedAt, setLastOptimizedAt] = useState(null)
@@ -149,15 +169,12 @@ export default function ManageCollectionOpsPage() {
   const selectedCity = useMemo(() => cities.find(entry => entry.name === city), [cities, city])
 
   const loadSummary = useCallback(async ({ signal } = {}) => {
+    setSummaryLoading(true)
     try {
       const res = await fetch('/api/ops/summary', { signal })
-      if (!res.ok) {
-        throw new Error(`Failed to load summary (${res.status})`)
-      }
+      if (!res.ok) throw new Error(`Failed to load summary (${res.status})`)
       const data = await res.json()
-      if (signal?.aborted) {
-        return
-      }
+      if (signal?.aborted) return
       setSummaryMetrics({
         activeZones: typeof data.activeZones === 'number' ? data.activeZones : null,
         totalZones: typeof data.totalZones === 'number' ? data.totalZones : null,
@@ -165,13 +182,14 @@ export default function ManageCollectionOpsPage() {
         fleetSize: typeof data.fleetSize === 'number' ? data.fleetSize : null,
         engagedTrucks: typeof data.engagedTrucks === 'number' ? data.engagedTrucks : null,
         totalBins: typeof data.totalBins === 'number' ? data.totalBins : null,
+        // ✅ FIX 5: Read serviceLevel from API
+        serviceLevel: data.serviceLevel || 'normal',
       })
     } catch (err) {
-      if (signal?.aborted) {
-        return
-      }
+      if (signal?.aborted) return
       console.error('loadSummary error', err)
-      setSummaryMetrics(metrics => ({ ...metrics }))
+    } finally {
+      if (!signal?.aborted) setSummaryLoading(false)
     }
   }, [])
 
@@ -179,18 +197,12 @@ export default function ManageCollectionOpsPage() {
     if (!truckId) return null
     try {
       const dirRes = await fetch(`/api/ops/routes/${encodeURIComponent(truckId)}/directions`, { signal })
-      if (!dirRes.ok) {
-        throw new Error(`Directions failed (${dirRes.status})`)
-      }
+      if (!dirRes.ok) throw new Error(`Directions failed (${dirRes.status})`)
       const data = await dirRes.json()
-      if (signal?.aborted) {
-        return null
-      }
+      if (signal?.aborted) return null
       return data
     } catch (err) {
-      if (signal?.aborted) {
-        return null
-      }
+      if (signal?.aborted) return null
       console.error('directions error', err)
       return null
     }
@@ -199,86 +211,47 @@ export default function ManageCollectionOpsPage() {
   const loadPlan = useCallback(async ({ city: cityOverride, signal } = {}) => {
     const targetCity = cityOverride ?? city
     if (!targetCity) return
-
     setPlanFetching(true)
-
     try {
       const res = await fetch(`/api/ops/routes/by-city?city=${encodeURIComponent(targetCity)}`, { signal })
-      if (signal?.aborted) {
-        return
-      }
-
+      if (signal?.aborted) return
       if (res.status === 404) {
-        setPlan(null)
-        setDirections(null)
-        setLastOptimizedAt(null)
+        setPlan(null); setDirections(null); setLastOptimizedAt(null)
         return
       }
-
-      if (!res.ok) {
-        throw new Error(`Failed to load plan (${res.status})`)
-      }
-
+      if (!res.ok) throw new Error(`Failed to load plan (${res.status})`)
       const data = await res.json()
-      if (signal?.aborted) {
-        return
-      }
-
-      const normalized = {
-        ...data,
-        depot: data.depot || selectedCity?.depot || null,
-        summary: data.summary || {},
-      }
-
+      if (signal?.aborted) return
+      const normalized = { ...data, depot: data.depot || selectedCity?.depot || null, summary: data.summary || {} }
       const totalStops = Array.isArray(normalized.stops) ? normalized.stops.length : 0
-      const completedCount = Array.isArray(normalized.stops) ? normalized.stops.filter(stop => stop.visited).length : 0
-      normalized.summary = {
-        ...normalized.summary,
-        completedStops: completedCount,
-        pendingStops: Math.max(totalStops - completedCount, 0),
-      }
-
+      const completedCount = Array.isArray(normalized.stops) ? normalized.stops.filter(s => s.visited).length : 0
+      normalized.summary = { ...normalized.summary, completedStops: completedCount, pendingStops: Math.max(totalStops - completedCount, 0) }
       setPlan(normalized)
-
       if (data.updatedAt) {
         const updated = new Date(data.updatedAt)
-        if (!Number.isNaN(updated.getTime())) {
-          setLastOptimizedAt(updated)
-        }
+        if (!Number.isNaN(updated.getTime())) setLastOptimizedAt(updated)
       }
-
       if (data.truckId) {
         const directionData = await fetchDirections(data.truckId, { signal })
-        if (signal?.aborted) {
-          return
-        }
-        if (directionData) {
-          setDirections({ ...directionData, truckId: data.truckId })
-        } else {
-          setDirections(null)
-        }
+        if (signal?.aborted) return
+        setDirections(directionData ? { ...directionData, truckId: data.truckId } : null)
       } else {
         setDirections(null)
       }
     } catch (err) {
-      if (signal?.aborted) {
-        return
-      }
+      if (signal?.aborted) return
       console.error('loadPlan error', err)
     } finally {
       setPlanFetching(false)
     }
   }, [city, selectedCity, fetchDirections])
 
-  // Load the managed city catalogue, falling back to static data when the API fails.
   useEffect(() => {
     let ignore = false
     async function loadCities() {
       try {
         const res = await fetch(CITIES_ENDPOINT)
-        if (!res.ok) {
-          throw new Error(`Failed to load cities (${res.status})`)
-        }
+        if (!res.ok) throw new Error(`Failed to load cities (${res.status})`)
         const data = await res.json()
         if (!ignore) {
           const list = Array.isArray(data) && data.length ? data : FALLBACK_CITIES
@@ -293,73 +266,63 @@ export default function ManageCollectionOpsPage() {
         }
       }
     }
-
     const summaryController = new AbortController()
     loadCities()
     loadSummary({ signal: summaryController.signal })
-    return () => {
-      ignore = true
-      summaryController.abort()
-    }
+    return () => { ignore = true; summaryController.abort() }
   }, [loadSummary])
 
-  // Whenever the selected city changes, fetch bins scoped to that municipality.
   useEffect(() => {
     if (!city) return
     let ignore = false
-
     async function loadBins() {
       try {
         const res = await fetch(`${BINS_ENDPOINT}?city=${encodeURIComponent(city)}`)
-        if (!res.ok) {
-          throw new Error(`Failed to load bins (${res.status})`)
-        }
+        if (!res.ok) throw new Error(`Failed to load bins (${res.status})`)
         const data = await res.json()
-        if (!ignore) {
-          setBins(Array.isArray(data) ? data : [])
-        }
+        if (!ignore) setBins(Array.isArray(data) ? data : [])
       } catch (err) {
         console.error('loadBins error', err)
-        if (!ignore) {
-          setBins([])
-        }
+        if (!ignore) setBins([])
       }
     }
-
     loadBins()
-    return () => {
-      ignore = true
-    }
+    return () => { ignore = true }
   }, [city])
 
-  // Reset derived state whenever the active city changes.
   useEffect(() => {
-    setPlan(null)
-    setDirections(null)
-    setError('')
-    setLastOptimizedAt(null)
+    setPlan(null); setDirections(null); setError(''); setLastOptimizedAt(null)
     setProgressSteps(createProgressState())
   }, [city])
 
+  // ✅ FIX 7: Pause polling when tab is hidden (Page Visibility API)
   useEffect(() => {
     if (!city || !liveSync) return undefined
-
     const controller = new AbortController()
     loadPlan({ city, signal: controller.signal })
 
-    const handleFocus = () => {
-      loadPlan({ city })
+    const handleFocus = () => loadPlan({ city })
+
+    let interval = null
+
+    const startPolling = () => {
+      interval = setInterval(() => {
+        if (!document.hidden) loadPlan({ city })
+      }, 10000)
     }
 
-    const interval = setInterval(() => {
-      loadPlan({ city })
-    }, 10000)
+    const handleVisibility = () => {
+      if (!document.hidden) loadPlan({ city })
+    }
 
+    startPolling()
     window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
       controller.abort()
       window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
       clearInterval(interval)
     }
   }, [city, liveSync, loadPlan])
@@ -376,73 +339,41 @@ export default function ManageCollectionOpsPage() {
     }
     const totalBins = bins.length > 0 ? bins.length : '—'
     const area = typeof selectedCity.areaSqKm === 'number'
-      ? selectedCity.areaSqKm.toLocaleString(undefined, { maximumFractionDigits: 1 })
-      : '—'
+      ? selectedCity.areaSqKm.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '—'
     const population = typeof selectedCity.population === 'number'
-      ? selectedCity.population.toLocaleString()
-      : '—'
+      ? selectedCity.population.toLocaleString() : '—'
     const lastCollection = formatDateLabel(selectedCity.lastCollectionAt)
-
-    setZoneDetails({
-      totalBins,
-      areaSize: area,
-      population,
-      lastCollection,
-    })
+    setZoneDetails({ totalBins, areaSize: area, population, lastCollection })
   }, [selectedCity, bins.length])
 
-  // Request a fresh optimized route plan and update progress indicators as we go.
   const optimize = useCallback(async () => {
     if (!city) return
-    setLoading(true)
-    setError('')
-    setProgressSteps(createProgressState(0))
+    setLoading(true); setError(''); setProgressSteps(createProgressState(0))
     try {
       const res = await fetch(OPTIMIZE_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city }),
       })
-
-      if (!res.ok) {
-        throw new Error(`Optimize failed with status ${res.status}`)
-      }
-
+      if (!res.ok) throw new Error(`Optimize failed with status ${res.status}`)
       const data = await res.json()
-      const normalized = {
-        ...data,
-        depot: data.depot || selectedCity?.depot || null,
-        summary: data.summary || {},
-      }
+      const normalized = { ...data, depot: data.depot || selectedCity?.depot || null, summary: data.summary || {} }
       const totalStops = Array.isArray(normalized.stops) ? normalized.stops.length : 0
-      const completedCount = Array.isArray(normalized.stops) ? normalized.stops.filter(stop => stop.visited).length : 0
-      normalized.summary = {
-        ...normalized.summary,
-        completedStops: completedCount,
-        pendingStops: Math.max(totalStops - completedCount, 0),
-      }
-      setPlan(normalized)
-      setLastOptimizedAt(new Date())
-      setProgressSteps(createProgressState(-1, 'done'))
-
+      const completedCount = Array.isArray(normalized.stops) ? normalized.stops.filter(s => s.visited).length : 0
+      normalized.summary = { ...normalized.summary, completedStops: completedCount, pendingStops: Math.max(totalStops - completedCount, 0) }
+      setPlan(normalized); setLastOptimizedAt(new Date()); setProgressSteps(createProgressState(-1, 'done'))
       if (normalized.truckId) {
         try {
           const dirRes = await fetch(`${DIRECTIONS_ENDPOINT}/${encodeURIComponent(normalized.truckId)}/directions`)
-          if (!dirRes.ok) {
-            throw new Error(`Directions failed (${dirRes.status})`)
-          }
-          const directionsData = await dirRes.json()
-          setDirections(directionsData)
-        } catch (directionErr) {
-          console.error('directions error', directionErr)
-          setDirections(null)
+          if (!dirRes.ok) throw new Error(`Directions failed (${dirRes.status})`)
+          setDirections(await dirRes.json())
+        } catch (dirErr) {
+          console.error('directions error', dirErr); setDirections(null)
         }
       } else {
         setDirections(null)
       }
-
-      await loadSummary()
-      setLiveSync(true)
+      await loadSummary(); setLiveSync(true)
     } catch (err) {
       console.error('optimize error', err)
       setError('Could not optimize right now. Please try again in a moment.')
@@ -458,37 +389,22 @@ export default function ManageCollectionOpsPage() {
       setCollectorBanner({ tone: 'error', message: 'No truck assignment found. Generate a plan before recording collections.' })
       return
     }
-
     try {
-      setPendingBin(binId)
-      setCollectorBanner(null)
+      setPendingBin(binId); setCollectorBanner(null)
       const res = await fetch('/api/ops/collections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ binId, truckId: plan.truckId }),
       })
-      if (!res.ok) {
-        throw new Error(`collection failed ${res.status}`)
-      }
-
+      if (!res.ok) throw new Error(`collection failed ${res.status}`)
       setCollectorBanner({ tone: 'success', message: `${binId} recorded as collected.` })
       setPlan(prev => {
         if (!prev) return prev
-        const updatedStops = (prev.stops || []).map(stop => (stop.binId === binId ? { ...stop, visited: true } : stop))
-        const completedCount = updatedStops.filter(stop => stop.visited).length
-        return {
-          ...prev,
-          stops: updatedStops,
-          summary: {
-            ...prev.summary,
-            completedStops: completedCount,
-            pendingStops: Math.max(updatedStops.length - completedCount, 0),
-          },
-        }
+        const updatedStops = (prev.stops || []).map(s => s.binId === binId ? { ...s, visited: true } : s)
+        const completedCount = updatedStops.filter(s => s.visited).length
+        return { ...prev, stops: updatedStops, summary: { ...prev.summary, completedStops: completedCount, pendingStops: Math.max(updatedStops.length - completedCount, 0) } }
       })
-
-      await loadPlan({ city })
-      await loadSummary()
+      await loadPlan({ city }); await loadSummary()
     } catch (err) {
       console.error('markCollected error', err)
       setCollectorBanner({ tone: 'error', message: 'Could not mark as collected. Please try again.' })
@@ -501,40 +417,27 @@ export default function ManageCollectionOpsPage() {
     ? Math.min(100, Math.round(((plan.loadKg ?? 0) / capacityLimit) * 100))
     : null
 
-  const waypoints = useMemo(() => {
-    if (!Array.isArray(plan?.stops)) {
-      return []
-    }
-    return plan.stops
-  }, [plan])
+  const waypoints = useMemo(() => Array.isArray(plan?.stops) ? plan.stops : [], [plan])
 
   const totalDistanceSource = directions?.distanceKm ?? plan?.distanceKm ?? 0
   const totalDistanceKm = typeof totalDistanceSource === 'number' ? totalDistanceSource : Number(totalDistanceSource) || 0
-  const completedStops = useMemo(() => waypoints.filter(stop => stop.visited).length, [waypoints])
+  const completedStops = useMemo(() => waypoints.filter(s => s.visited).length, [waypoints])
   const remainingStops = waypoints.length - completedStops
-  const routeProgress = waypoints.length
-    ? Math.round((completedStops / waypoints.length) * 100)
-    : 0
+  const routeProgress = waypoints.length ? Math.round((completedStops / waypoints.length) * 100) : 0
+
   const baselineDistanceKm = useMemo(() => {
     if (!plan) return null
     const reported = plan.summary?.baselineDistanceKm
-    if (typeof reported === 'number' && reported > 0) {
-      return reported
-    }
+    if (typeof reported === 'number' && reported > 0) return reported
     if (!waypoints.length) return null
-    const assumedLegKm = 2.2
-    return Number((waypoints.length * assumedLegKm).toFixed(1))
+    return Number((waypoints.length * 2.2).toFixed(1))
   }, [plan, waypoints.length])
 
   const distanceSavedKm = baselineDistanceKm && typeof totalDistanceKm === 'number'
-    ? Math.max(0, Number((baselineDistanceKm - totalDistanceKm).toFixed(1)))
-    : 0
+    ? Math.max(0, Number((baselineDistanceKm - totalDistanceKm).toFixed(1))) : 0
   const routeEfficiencyGain = baselineDistanceKm && typeof totalDistanceKm === 'number' && baselineDistanceKm > 0
-    ? Math.max(0, Math.min(100, Math.round(((baselineDistanceKm - totalDistanceKm) / baselineDistanceKm) * 100)))
-    : null
-  const fuelSavedLiters = distanceSavedKm > 0
-    ? Number((distanceSavedKm * FUEL_BURN_RATE_L_PER_KM).toFixed(1))
-    : 0
+    ? Math.max(0, Math.min(100, Math.round(((baselineDistanceKm - totalDistanceKm) / baselineDistanceKm) * 100))) : null
+  const fuelSavedLiters = distanceSavedKm > 0 ? Number((distanceSavedKm * FUEL_BURN_RATE_L_PER_KM).toFixed(1)) : 0
 
   const areaLookup = useMemo(() => {
     const mapping = new Map()
@@ -556,75 +459,39 @@ export default function ManageCollectionOpsPage() {
       current.stops += 1
       tallies.set(areaName, current)
     })
-    return Array.from(tallies.values())
-      .sort((a, b) => b.totalKg - a.totalKg)
-      .slice(0, 3)
+    return Array.from(tallies.values()).sort((a, b) => b.totalKg - a.totalKg).slice(0, 3)
   }, [plan?.stops, areaLookup])
 
   const handleExportReport = useCallback(() => {
-    if (!plan) {
-      setError('Generate a route before exporting a report.')
-      return
-    }
-
+    if (!plan) { setError('Generate a route before exporting a report.'); return }
     setError('')
-
     const { filename, content } = buildCollectionOpsReport({
-      city,
-      plan,
-      summaryMetrics,
-      completedStops,
-      remainingStops,
-      totalDistanceKm,
-      durationMinutes: directions?.durationMin,
-      capacityLimit,
-      loadProgress,
-      routeEfficiencyGain,
-      fuelSavedLiters,
-      topWasteAreas,
-      liveSync,
+      city, plan, summaryMetrics, completedStops, remainingStops, totalDistanceKm,
+      durationMinutes: directions?.durationMin, capacityLimit, loadProgress,
+      routeEfficiencyGain, fuelSavedLiters, topWasteAreas, liveSync,
       highPriorityRatio: HIGH_PRIORITY_RATIO,
       directionsSource: directions?.line ? 'OSRM road geometry' : 'Fallback heuristic',
     })
-
     const blob = new Blob([content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    link.href = url; link.download = filename
+    document.body.appendChild(link); link.click(); document.body.removeChild(link)
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }, [plan, city, summaryMetrics, completedStops, remainingStops, totalDistanceKm, directions, capacityLimit, loadProgress, routeEfficiencyGain, fuelSavedLiters, topWasteAreas, liveSync])
 
   const summaryHighlights = useMemo(() => {
     const { activeZones, totalZones, availableTrucks, fleetSize, engagedTrucks, totalBins } = summaryMetrics
-
     const activeHelper = typeof totalZones === 'number'
       ? `${typeof activeZones === 'number' ? Math.min(activeZones, totalZones).toLocaleString() : '—'} of ${totalZones.toLocaleString()} zones serviced last 7 days`
       : 'Based on last 7 days of collections'
-
     const trucksHelper = typeof fleetSize === 'number'
       ? `${typeof engagedTrucks === 'number' ? engagedTrucks.toLocaleString() : '—'} deployed / ${fleetSize.toLocaleString()} total`
       : 'Fleet readiness'
-
     return [
-      {
-        label: 'Active zones',
-        value: formatMetric(activeZones),
-        helper: activeHelper,
-      },
-      {
-        label: 'Available trucks',
-        value: formatMetric(availableTrucks),
-        helper: trucksHelper,
-      },
-      {
-        label: 'Total bins',
-        value: formatMetric(totalBins),
-        helper: 'Across all active councils',
-      },
+      { label: 'Active zones', value: formatMetric(activeZones), helper: activeHelper },
+      { label: 'Available trucks', value: formatMetric(availableTrucks), helper: trucksHelper },
+      { label: 'Total bins', value: formatMetric(totalBins), helper: 'Across all active councils' },
     ]
   }, [summaryMetrics])
 
@@ -636,34 +503,21 @@ export default function ManageCollectionOpsPage() {
     const thresholdLabel = plan?.summary?.threshold
       ? `Threshold ≥ ${Math.round(plan.summary.threshold * 100)}%`
       : 'Current settings'
-
     return [
-      {
-        label: 'Stops scheduled',
-        value: stops,
-        helper: plan ? `${plan.summary?.consideredBins ?? stops} bins considered` : 'Awaiting latest plan',
-        icon: MapPinned,
-      },
-      {
-        label: 'Predicted distance',
-        value: distanceLabel,
-        helper: directions?.line ? 'OSRM estimated distance' : 'Based on plan metrics',
-        icon: RouteIcon,
-      },
-      {
-        label: 'Estimated duration',
-        value: durationLabel,
-        helper: directions?.line ? 'Live traffic heuristics' : 'Configure directions to enable ETA',
-        icon: Timer,
-      },
-      {
-        label: 'Load collected',
-        value: loadLabel,
-        helper: plan ? `Capacity ${capacityLimit} kg • ${thresholdLabel}` : thresholdLabel,
-        icon: Gauge,
-      },
+      { label: 'Stops scheduled', value: stops, helper: plan ? `${plan.summary?.consideredBins ?? stops} bins considered` : 'Awaiting latest plan', icon: MapPinned },
+      { label: 'Predicted distance', value: distanceLabel, helper: directions?.line ? 'OSRM estimated distance' : 'Based on plan metrics', icon: RouteIcon },
+      { label: 'Estimated duration', value: durationLabel, helper: directions?.line ? 'Live traffic heuristics' : 'Configure directions to enable ETA', icon: Timer },
+      { label: 'Load collected', value: loadLabel, helper: plan ? `Capacity ${capacityLimit} kg • ${thresholdLabel}` : thresholdLabel, icon: Gauge },
     ]
   }, [plan, directions, loading, capacityLimit, totalDistanceKm])
+
+  // ✅ FIX 5: Dynamic service level chip config
+  const serviceLevelConfig = {
+    normal: { label: 'Service level normal', color: 'success' },
+    warning: { label: 'Service level warning', color: 'warning' },
+    critical: { label: 'Service level critical', color: 'error' },
+  }
+  const slConfig = serviceLevelConfig[summaryMetrics.serviceLevel] || serviceLevelConfig.normal
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6">
@@ -672,30 +526,46 @@ export default function ManageCollectionOpsPage() {
           <div className="w-full">
             <h2 className="text-3xl font-semibold text-slate-900">Manage Collection Operations</h2>
             <p className="mt-2 max-w-xl text-sm text-slate-600">Generate and manage optimized routes for council zones</p>
+
+            {/* ✅ FIX 3: Loading skeletons while summary fetches */}
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {summaryHighlights.map(item => (
                 <div key={item.label} className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{item.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-slate-900">{item.value}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
+                  {summaryLoading ? (
+                    <>
+                      <Skeleton variant="text" width={60} height={36} sx={{ mt: 1 }} />
+                      <Skeleton variant="text" width={120} height={16} sx={{ mt: 0.5 }} />
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-2xl font-semibold text-slate-900">{item.value}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+
           <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            {/* ✅ FIX 2: Export button with tooltip when disabled */}
             <Button
               onClick={handleExportReport}
               variant="contained"
               startIcon={<FileDown className="h-4 w-4" />}
               disabled={!plan}
+              title={!plan ? 'Generate a route first to export a report' : 'Export report'}
               sx={{ borderRadius: '999px', textTransform: 'none', fontWeight: 600, paddingInline: '1.35rem' }}
             >
               Export report
             </Button>
+
+            {/* ✅ FIX 5: Dynamic service level chip */}
             <Chip
               icon={<ShieldCheck className="h-3.5 w-3.5" />}
-              label="Service level normal"
-              color="success"
+              label={slConfig.label}
+              color={slConfig.color}
               variant="outlined"
               sx={{ borderRadius: '999px', fontWeight: 600, textTransform: 'none' }}
             />
@@ -714,15 +584,9 @@ export default function ManageCollectionOpsPage() {
               actionLabel="Generate Optimized Route"
             />
 
-            {error && (
-              <Alert severity="error" variant="outlined">{error}</Alert>
-            )}
-
+            {error && <Alert severity="error" variant="outlined">{error}</Alert>}
             {loading && <ProgressSteps steps={progressSteps} />}
-
-            {cities.length > 0 && (
-              <MiniZoneMap cities={cities} selectedCity={city} onSelectCity={setCity} />
-            )}
+            {cities.length > 0 && <MiniZoneMap cities={cities} selectedCity={city} onSelectCity={setCity} />}
 
             <Card className="rounded-3xl border border-slate-200/70 bg-white/90">
               <CardContent className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
@@ -730,7 +594,9 @@ export default function ManageCollectionOpsPage() {
                   <MapPinned className="h-3.5 w-3.5 text-emerald-500" />
                   Depot: {selectedCity?.name ?? '—'} ({depotLat} · {depotLon})
                 </span>
-                {lastOptimizedAt && <span>Last run: {lastOptimizedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                {lastOptimizedAt && (
+                  <span>Last run: {lastOptimizedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                )}
                 <span className="inline-flex items-center gap-2">
                   <Truck className="h-3.5 w-3.5 text-slate-500" />
                   Truck default: {plan?.truckId || 'TRUCK-01'}
@@ -742,13 +608,7 @@ export default function ManageCollectionOpsPage() {
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
               {kpis.map(kpi => (
-                <KpiCard
-                  key={kpi.label}
-                  icon={kpi.icon}
-                  label={kpi.label}
-                  value={kpi.value}
-                  helper={kpi.helper}
-                />
+                <KpiCard key={kpi.label} icon={kpi.icon} label={kpi.label} value={kpi.value} helper={kpi.helper} />
               ))}
             </div>
 
@@ -761,14 +621,17 @@ export default function ManageCollectionOpsPage() {
                     <h3 className="text-sm uppercase tracking-wide text-slate-400">High waste areas</h3>
                     <p className="mt-1 text-sm text-slate-300">Focus crews on sectors generating the heaviest loads from today&apos;s plan.</p>
                   </div>
-                  <Chip
-                    icon={<Flame className="h-3.5 w-3.5" />}
-                    label={routeEfficiencyGain !== null ? `${routeEfficiencyGain}% gain` : 'Route active'}
-                    color="warning"
-                    size="small"
-                    variant="outlined"
-                    sx={{ borderRadius: '999px', fontWeight: 600, textTransform: 'none' }}
-                  />
+                  {/* ✅ FIX: Only show chip when route is active */}
+                  {plan && (
+                    <Chip
+                      icon={<Flame className="h-3.5 w-3.5" />}
+                      label={routeEfficiencyGain !== null ? `${routeEfficiencyGain}% gain` : 'Route active'}
+                      color="warning"
+                      size="small"
+                      variant="outlined"
+                      sx={{ borderRadius: '999px', fontWeight: 600, textTransform: 'none' }}
+                    />
+                  )}
                 </div>
 
                 {topWasteAreas.length > 0 ? (
@@ -812,6 +675,14 @@ export default function ManageCollectionOpsPage() {
                   </div>
                 )}
               </div>
+
+              {/* ✅ NEW: Route timeline stop list */}
+              {plan && waypoints.length > 0 && (
+                <RouteTimeline
+                  waypoints={waypoints}
+                  durationMinutes={directions?.durationMin}
+                />
+              )}
 
               <div className="space-y-3 text-sm text-slate-500">
                 {loading && (
@@ -879,8 +750,7 @@ export default function ManageCollectionOpsPage() {
               variant="determinate"
               value={plan ? routeProgress : 0}
               sx={{
-                borderRadius: 999,
-                height: 8,
+                borderRadius: 999, height: 8,
                 backgroundColor: 'rgba(148, 163, 184, 0.25)',
                 '& .MuiLinearProgress-bar': { backgroundColor: '#10b981' },
               }}
@@ -889,12 +759,19 @@ export default function ManageCollectionOpsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-400">Capacity utilization</p>
-                <LinearProgress
-                  variant="determinate"
-                  value={plan ? loadProgress ?? 0 : 0}
-                  sx={{ borderRadius: 999, height: 6, backgroundColor: 'rgba(148, 163, 184, 0.25)', '& .MuiLinearProgress-bar': { backgroundColor: '#0ea5e9' } }}
-                />
-                <p className="mt-2 text-xs text-slate-500">{plan ? `${plan.loadKg ?? 0} kg / ${capacityLimit} kg` : 'Awaiting plan data'}</p>
+                {/* ✅ FIX 4: Better empty state for capacity bar */}
+                {plan ? (
+                  <>
+                    <LinearProgress
+                      variant="determinate"
+                      value={loadProgress ?? 0}
+                      sx={{ mt: 1.5, borderRadius: 999, height: 6, backgroundColor: 'rgba(148, 163, 184, 0.25)', '& .MuiLinearProgress-bar': { backgroundColor: '#0ea5e9' } }}
+                    />
+                    <p className="mt-2 text-xs text-slate-500">{plan.loadKg ?? 0} kg / {capacityLimit} kg</p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">Awaiting plan data</p>
+                )}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
                 <p className="text-xs uppercase tracking-wide text-slate-400">Stops completed</p>
@@ -906,9 +783,7 @@ export default function ManageCollectionOpsPage() {
             {collectorBanner && (
               <Alert
                 severity={collectorBanner.tone === 'success' ? 'success' : 'error'}
-                icon={collectorBanner.tone === 'success'
-                  ? <CheckCircle2 className="h-4 w-4" />
-                  : <AlertTriangle className="h-4 w-4" />}
+                icon={collectorBanner.tone === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                 variant="outlined"
                 sx={{ borderRadius: '16px' }}
               >
