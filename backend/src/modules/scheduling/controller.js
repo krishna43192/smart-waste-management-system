@@ -1,5 +1,6 @@
+const crypto = require('crypto');
 const { z } = require('zod');
-const Stripe = require('stripe');
+const Razorpay = require('razorpay');
 const User = require('../../models/User');
 const SpecialCollectionRequest = require('../../models/SpecialCollectionRequest');
 const SpecialCollectionPayment = require('../../models/SpecialCollectionPayment');
@@ -10,62 +11,61 @@ const {
   sanitizeMetadata,
 } = require('../../services/mailer');
 const { generateSpecialCollectionReceipt } = require('./receipt');
-
-// ADDED: Import Points model for gamification
 const Points = require('../../models/Points');
 const { POINT_ACTIONS } = require('../../models/Points');
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+// ---------------------------------------------------------------------------
+// Razorpay client
+// ---------------------------------------------------------------------------
+const razorpay =
+  process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+    ? new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      })
+    : null;
 
-const respondWithError = (res, status, message, extra = {}) => (
-  res.status(status).json({ ok: false, message, ...extra })
-);
+function verifyRazorpaySignature(data, secret, receivedSignature) {
+  const expected = crypto.createHmac('sha256', secret).update(data).digest('hex');
+  return expected === receivedSignature;
+}
 
-const handleZodError = (res, error) => respondWithError(res, 400, error.errors[0].message);
+const respondWithError = (res, status, message, extra = {}) =>
+  res.status(status).json({ ok: false, message, ...extra });
 
+const handleZodError = (res, error) =>
+  respondWithError(res, 400, error.errors[0].message);
+
+// ---------------------------------------------------------------------------
+// Allowed item types and slot configuration
+// ---------------------------------------------------------------------------
 const allowedItems = [
   {
     id: 'furniture',
     label: 'Furniture & bulky items',
     description: 'Wardrobes, sofas, tables, mattresses and similar bulky household items.',
     allow: true,
-    policy: {
-      baseFee: 150,       // first 2 items free of base charge
-      feePerExtraItem: 30,       // ₹30 per extra item beyond 2
-      includedWeightKgPerItem: 25,
-      ratePerKg: 1,              // ₹2/kg over included weight
-    },
+    policy: { baseFee: 150, feePerExtraItem: 30, includedWeightKgPerItem: 25, ratePerKg: 1 },
   },
   {
     id: 'e-waste',
     label: 'Electronic waste',
     description: 'Televisions, refrigerators, computers, microwaves and other electrical items.',
     allow: true,
-    policy: {
-      baseFee: 100,              // ₹100 flat base (was ₹1500)
-      feePerAdditionalItem: 50,  // ₹50 per extra item (was ₹750)
-      includedWeightKgPerItem: 10,
-      ratePerKg: 1,              // ₹3/kg over included weight (was ₹95)
-    },
+    policy: { baseFee: 100, feePerAdditionalItem: 50, includedWeightKgPerItem: 10, ratePerKg: 1 },
   },
   {
     id: 'yard',
     label: 'Garden trimmings',
     description: 'Branches, palm fronds, and bundled yard waste (max 25kg per bundle).',
     allow: true,
-    policy: {
-      baseFee: 80,       // first 5 bundles free
-      feePerExtraItem: 20,       // ₹20 per extra bundle
-      includedWeightKgPerItem: 15,
-      ratePerKg: 1,              // ₹1/kg over included weight (was ₹30)
-    },
+    policy: { baseFee: 80, feePerExtraItem: 20, includedWeightKgPerItem: 15, ratePerKg: 1 },
   },
   {
     id: 'construction',
     label: 'Construction rubble',
-    // ✅ CHANGE 1: Updated helpline to GHMC
-    description: 'Bricks, concrete, tiles and other construction debris must be handled via licensed private haulers (GHMC helpline: 040-21111111).',
+    description:
+      'Bricks, concrete, tiles and other construction debris must be handled via licensed private haulers (GHMC helpline: 040-21111111).',
     allow: false,
   },
 ];
@@ -76,10 +76,10 @@ const SLOT_CONFIG = {
   durationMinutes: 120,
   maxRequestsPerSlot: 3,
   lookAheadDays: 5,
-  timezone: 'Asia/Kolkata', // ✅ CHANGE 2: Hyderabad timezone
+  timezone: 'Asia/Kolkata',
 };
 
-const TAX_RATE = 0.18; // ✅ CHANGE 3: 18% GST instead of 3%
+const TAX_RATE = 0.18;
 
 allowedItems.forEach(item => {
   if (item.policy) Object.freeze(item.policy);
@@ -88,6 +88,9 @@ allowedItems.forEach(item => {
 Object.freeze(allowedItems);
 Object.freeze(SLOT_CONFIG);
 
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
 const approxWeightSchema = z.union([
   z.number().positive('Approximate weight must be greater than zero'),
   z.null(),
@@ -100,18 +103,19 @@ const residentDetailsSchema = {
   address: z.string().min(1, 'Address is required'),
   district: z.string().min(1, 'District is required'),
   email: z.string().email('A valid email is required'),
-  // ✅ CHANGE 4: Indian phone numbers are 10 digits
   phone: z.string().min(10, 'A valid 10-digit Indian phone number is required'),
   approxWeight: approxWeightSchema,
   specialNotes: z.string().max(1000).optional(),
 };
 
-const availabilitySchema = z.object({
-  userId: z.string().min(1, 'User id is required'),
-  itemType: z.string().min(1, 'Item type is required'),
-  quantity: z.number().int().min(1, 'Quantity must be at least 1'),
-  preferredDateTime: z.string().datetime().or(z.date()),
-}).extend(residentDetailsSchema);
+const availabilitySchema = z
+  .object({
+    userId: z.string().min(1, 'User id is required'),
+    itemType: z.string().min(1, 'Item type is required'),
+    quantity: z.number().int().min(1, 'Quantity must be at least 1'),
+    preferredDateTime: z.string().datetime().or(z.date()),
+  })
+  .extend(residentDetailsSchema);
 
 const bookingSchema = availabilitySchema.extend({
   slotId: z.string().min(1, 'Slot id is required'),
@@ -120,16 +124,22 @@ const bookingSchema = availabilitySchema.extend({
   deferPayment: z.boolean().optional(),
 });
 
-const listSchema = z.object({
-  userId: z.string().min(1, 'User id is required'),
-});
+const listSchema = z.object({ userId: z.string().min(1, 'User id is required') });
 
 const checkoutInitSchema = availabilitySchema.extend({
   slotId: z.string().min(1, 'Slot id is required'),
-  successUrl: z.string().url('Success URL must be a valid URL'),
-  cancelUrl: z.string().url('Cancel URL must be a valid URL'),
 });
 
+const verifyCheckoutSchema = z.object({
+  razorpay_order_id: z.string().min(1),
+  razorpay_payment_id: z.string().min(1),
+  razorpay_signature: z.string().min(1),
+  userId: z.string().min(1),
+});
+
+// ---------------------------------------------------------------------------
+// Pure utility functions
+// ---------------------------------------------------------------------------
 function findItemPolicy(itemType) {
   return allowedItems.find(item => item.id === itemType);
 }
@@ -138,7 +148,6 @@ function buildDisallowedResponse(policy) {
   return {
     ok: false,
     code: 'ITEM_NOT_ALLOWED',
-    // ✅ CHANGE 5: GHMC branding
     message: `${policy.label} cannot be collected via the GHMC special pickup programme. ${policy.description}`,
     disposalInfo: policy.description,
   };
@@ -179,21 +188,15 @@ function generateCandidateSlots(preferred, { lookAheadDays, startHour, endHour, 
   return slots;
 }
 
-function getPreferredDayBounds(preferred) {
+function filterCandidatesForPreferredDay(candidates, preferred, now = new Date()) {
   const preferredDayStart = new Date(preferred);
   preferredDayStart.setHours(0, 0, 0, 0);
   const preferredDayEnd = new Date(preferredDayStart);
   preferredDayEnd.setDate(preferredDayEnd.getDate() + 1);
-  return { preferredDayStart, preferredDayEnd };
-}
 
-function filterCandidatesForPreferredDay(candidates, preferred, now = new Date()) {
-  const { preferredDayStart, preferredDayEnd } = getPreferredDayBounds(preferred);
-  return candidates.filter(candidate => (
-    candidate.start >= preferredDayStart
-    && candidate.start < preferredDayEnd
-    && candidate.end > now
-  ));
+  return candidates.filter(
+    c => c.start >= preferredDayStart && c.start < preferredDayEnd && c.end > now,
+  );
 }
 
 async function attachAvailability(slots) {
@@ -206,7 +209,7 @@ async function attachAvailability(slots) {
     const capacityLeft = Math.max(SLOT_CONFIG.maxRequestsPerSlot - count, 0);
     results.push({ ...slot, capacityLeft, isAvailable: capacityLeft > 0 });
   }
-  return results.filter(slot => slot.isAvailable);
+  return results.filter(s => s.isAvailable);
 }
 
 function toPositiveNumber(value) {
@@ -250,14 +253,11 @@ function calculatePayment(itemPolicy, quantity, approxWeightPerItemKg) {
   }
 
   const roundedWeightCharge = Math.round(weightCharge * 100) / 100;
-  const baseChargeRaw = Math.max(amount - weightCharge, 0);
-  const roundedBaseCharge = Math.round(baseChargeRaw * 100) / 100;
+  const roundedBaseCharge = Math.round(Math.max(amount - weightCharge, 0) * 100) / 100;
   const taxableBase = Math.max(roundedBaseCharge + roundedWeightCharge, 0);
-  const taxChargeRaw = taxableBase * TAX_RATE;
-  const roundedTaxCharge = Math.round(taxChargeRaw * 100) / 100;
+  const roundedTaxCharge = Math.round(taxableBase * TAX_RATE * 100) / 100;
   const roundedTotalWeight = Math.round(totalWeightKg * 10) / 10;
-  const grossTotal = taxableBase + roundedTaxCharge;
-  const roundedTotal = Math.round(grossTotal * 100) / 100;
+  const roundedTotal = Math.round((taxableBase + roundedTaxCharge) * 100) / 100;
 
   return {
     required: roundedTotal > 0,
@@ -279,27 +279,29 @@ async function expireOverduePendingRequests() {
   if (!overdue.length) return;
 
   const ids = overdue.map(doc => doc._id);
-  await SpecialCollectionRequest.updateMany({ _id: { $in: ids } }, {
-    $set: {
-      status: 'cancelled',
-      paymentStatus: 'failed',
-      cancellationReason: 'Payment was not received before the scheduled time.',
+  await SpecialCollectionRequest.updateMany(
+    { _id: { $in: ids } },
+    {
+      $set: {
+        status: 'cancelled',
+        paymentStatus: 'failed',
+        cancellationReason: 'Payment was not received before the scheduled time.',
+      },
     },
-  });
+  );
 
-  await Bill.updateMany({
-    specialCollectionRequestId: { $in: ids },
-    status: 'unpaid',
-  }, { $set: { status: 'cancelled' } });
+  await Bill.updateMany(
+    { specialCollectionRequestId: { $in: ids }, status: 'unpaid' },
+    { $set: { status: 'cancelled' } },
+  );
 }
 
 function generateSpecialCollectionInvoiceNumber(requestId) {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const suffix = requestId.toString().slice(-6).toUpperCase();
-  return `GHMC-SC-${datePart}-${suffix}`; // ✅ CHANGE 6: GHMC prefix
+  return `GHMC-SC-${datePart}-${suffix}`;
 }
 
-// GAMIFICATION HELPER: Awards pickup points safely (never blocks main flow)
 async function awardPickupPoints(userId, requestDocId) {
   try {
     await Points.award({
@@ -309,9 +311,8 @@ async function awardPickupPoints(userId, requestDocId) {
       referenceId: requestDocId.toString(),
       referenceType: 'schedule',
     });
-    console.log(`Points awarded to resident ${userId} for special pickup request`);
-  } catch (pointsError) {
-    console.warn('Failed to award points for pickup request', pointsError);
+  } catch (e) {
+    console.warn('Failed to award points for pickup request', e);
   }
 }
 
@@ -326,10 +327,14 @@ async function createDeferredBooking({ user, payload, slot, payment, itemPolicy 
     district: payload.district?.trim(),
     contactEmail: payload.email?.trim() || user.email,
     contactPhone: payload.phone?.trim(),
-    approxWeightKg: typeof payload.approxWeight === 'number' && Number.isFinite(payload.approxWeight)
-      ? payload.approxWeight : undefined,
-    totalWeightKg: typeof payment.totalWeightKg === 'number' && Number.isFinite(payment.totalWeightKg)
-      ? payment.totalWeightKg : undefined,
+    approxWeightKg:
+      typeof payload.approxWeight === 'number' && Number.isFinite(payload.approxWeight)
+        ? payload.approxWeight
+        : undefined,
+    totalWeightKg:
+      typeof payment.totalWeightKg === 'number' && Number.isFinite(payment.totalWeightKg)
+        ? payment.totalWeightKg
+        : undefined,
     specialNotes: payload.specialNotes?.trim(),
     itemType: payload.itemType,
     itemLabel: itemPolicy?.label,
@@ -355,7 +360,7 @@ async function createDeferredBooking({ user, payload, slot, payment, itemPolicy 
     invoiceNumber,
     description: `GHMC special collection pickup - ${itemPolicy?.label || payload.itemType}`,
     amount: payment.amount,
-    currency: 'INR', // ✅ CHANGE 7: INR
+    currency: 'INR',
     billingPeriodStart: slot.start,
     billingPeriodEnd: slot.end,
     generatedAt: new Date(),
@@ -367,8 +372,6 @@ async function createDeferredBooking({ user, payload, slot, payment, itemPolicy 
   requestDoc.paymentReference = invoiceNumber;
   requestDoc.billingId = bill._id;
   await requestDoc.save();
-
-  // GAMIFICATION: Award points for requesting a special pickup (deferred payment)
   await awardPickupPoints(user._id, requestDoc._id);
 
   return { requestDoc, bill };
@@ -388,43 +391,34 @@ async function dispatchBookingEmails({ user, requestDoc, slot, receiptBuffer, is
               issuedAt,
             }
           : undefined,
-      }).catch(error => {
-        console.warn('Failed to email resident about special collection', error);
-        return { sent: false };
-      }),
-      notifyAuthorityOfSpecialPickup({ request: requestDoc, slot }).catch(error => {
-        console.warn('Failed to email authority about special collection', error);
+      }).catch(e => { console.warn('Failed to email resident', e); return { sent: false }; }),
+      notifyAuthorityOfSpecialPickup({ request: requestDoc, slot }).catch(e => {
+        console.warn('Failed to email authority', e);
         return { sent: false };
       }),
     ]);
 
-    const notificationUpdates = {};
-    if (residentNotice.sent) {
-      notificationUpdates['notifications.residentSentAt'] = residentNotice.sentAt || new Date();
-    }
-    if (authorityNotice.sent) {
-      notificationUpdates['notifications.authoritySentAt'] = authorityNotice.sentAt || new Date();
-    }
+    const updates = {};
+    if (residentNotice.sent) updates['notifications.residentSentAt'] = residentNotice.sentAt || new Date();
+    if (authorityNotice.sent) updates['notifications.authoritySentAt'] = authorityNotice.sentAt || new Date();
 
-    if (Object.keys(notificationUpdates).length) {
-      await SpecialCollectionRequest.updateOne({ _id: requestDoc._id }, { $set: notificationUpdates });
-      Object.assign(requestDoc.notifications, notificationUpdates);
+    if (Object.keys(updates).length) {
+      await SpecialCollectionRequest.updateOne({ _id: requestDoc._id }, { $set: updates });
     }
-  } catch (notificationError) {
-    console.warn('Special collection notifications error', notificationError);
+  } catch (e) {
+    console.warn('Booking email dispatch error', e);
   }
 }
 
-const PENDING_PAYMENT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// Background sweep — expire pending-payment requests past their slot time.
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 if (process.env.SCHEDULING_SWEEP_DISABLED !== 'true') {
   const sweepTimer = setInterval(() => {
-    expireOverduePendingRequests().catch(error => {
-      console.warn('Failed to expire overdue pending-payment requests', error);
-    });
-  }, PENDING_PAYMENT_SWEEP_INTERVAL_MS);
-  if (typeof sweepTimer.unref === 'function') {
-    sweepTimer.unref();
-  }
+    expireOverduePendingRequests().catch(e =>
+      console.warn('Failed to expire overdue pending-payment requests', e),
+    );
+  }, SWEEP_INTERVAL_MS);
+  if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
 }
 
 async function finaliseBooking({
@@ -466,10 +460,14 @@ async function finaliseBooking({
     district: payload.district?.trim(),
     contactEmail: payload.email?.trim() || user.email,
     contactPhone: payload.phone?.trim(),
-    approxWeightKg: typeof payload.approxWeight === 'number' && Number.isFinite(payload.approxWeight)
-      ? payload.approxWeight : undefined,
-    totalWeightKg: typeof payment.totalWeightKg === 'number' && Number.isFinite(payment.totalWeightKg)
-      ? payment.totalWeightKg : undefined,
+    approxWeightKg:
+      typeof payload.approxWeight === 'number' && Number.isFinite(payload.approxWeight)
+        ? payload.approxWeight
+        : undefined,
+    totalWeightKg:
+      typeof payment.totalWeightKg === 'number' && Number.isFinite(payment.totalWeightKg)
+        ? payment.totalWeightKg
+        : undefined,
     specialNotes: payload.specialNotes?.trim(),
     itemType: payload.itemType,
     itemLabel: itemPolicy?.label,
@@ -497,19 +495,20 @@ async function finaliseBooking({
         slot,
         issuedAt,
       });
-    } catch (receiptError) {
-      console.warn('Failed to generate special collection receipt PDF', receiptError);
+    } catch (e) {
+      console.warn('Failed to generate receipt PDF', e);
     }
 
     const paymentPayload = {
       requestId: requestDoc._id,
       userId: user._id,
       amount: payment.amount,
-      currency: 'INR', // ✅ CHANGE 7: INR
+      currency: 'INR',
       status: 'success',
       provider,
       reference: paymentReference,
-      stripeSessionId: paymentDoc?.stripeSessionId,
+      razorpayOrderId: paymentDoc?.razorpayOrderId,
+      razorpayPaymentId: paymentDoc?.razorpayPaymentId,
       slotId: slot.slotId,
       metadata: {
         ...(paymentDoc?.metadata || {}),
@@ -540,8 +539,6 @@ async function finaliseBooking({
   }
 
   await dispatchBookingEmails({ user, requestDoc, slot, receiptBuffer, issuedAt });
-
-  // GAMIFICATION: Award points for successfully scheduling a special pickup
   await awardPickupPoints(user._id, requestDoc._id);
 
   return requestDoc;
@@ -562,6 +559,16 @@ async function resolveUser(userId) {
   return user;
 }
 
+async function safeJson(response) {
+  const text = await response.text?.() ?? '';
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers
+// ---------------------------------------------------------------------------
+
 async function getConfig(_req, res) {
   return res.json({ ok: true, items: allowedItems, slotConfig: SLOT_CONFIG });
 }
@@ -576,10 +583,13 @@ async function checkAvailability(req, res, next) {
     if (!policy.allow) return res.status(400).json(buildDisallowedResponse(policy));
 
     const preferred = toDate(payload.preferredDateTime);
-    if (Number.isNaN(preferred.getTime())) return respondWithError(res, 400, 'Preferred date/time is invalid.');
+    if (Number.isNaN(preferred.getTime()))
+      return respondWithError(res, 400, 'Preferred date/time is invalid.');
 
     const candidates = generateCandidateSlots(preferred, SLOT_CONFIG);
-    const availableSlots = await attachAvailability(filterCandidatesForPreferredDay(candidates, preferred));
+    const availableSlots = await attachAvailability(
+      filterCandidatesForPreferredDay(candidates, preferred),
+    );
     const payment = calculatePayment(policy, payload.quantity, payload.approxWeight);
 
     return res.json({
@@ -607,7 +617,8 @@ async function confirmBooking(req, res, next) {
     if (!policy.allow) return res.status(400).json(buildDisallowedResponse(policy));
 
     const preferred = toDate(payload.preferredDateTime);
-    if (Number.isNaN(preferred.getTime())) return respondWithError(res, 400, 'Preferred date/time is invalid.');
+    if (Number.isNaN(preferred.getTime()))
+      return respondWithError(res, 400, 'Preferred date/time is invalid.');
 
     const payment = calculatePayment(policy, payload.quantity, payload.approxWeight);
     const deferPayment = Boolean(payload.deferPayment) && payment.required;
@@ -617,32 +628,32 @@ async function confirmBooking(req, res, next) {
     }
 
     const slotCandidates = generateCandidateSlots(preferred, SLOT_CONFIG);
-    const sameDayCandidates = filterCandidatesForPreferredDay(slotCandidates, preferred);
-    const slot = sameDayCandidates.find(candidate => candidate.slotId === payload.slotId);
+    const slot = filterCandidatesForPreferredDay(slotCandidates, preferred).find(
+      c => c.slotId === payload.slotId,
+    );
     if (!slot) return respondWithError(res, 400, 'Selected slot is no longer available.');
-
-    const bookingDetails = {
-      itemType: payload.itemType,
-      quantity: payload.quantity,
-      preferredDateTime: payload.preferredDateTime,
-      residentName: payload.residentName,
-      ownerName: payload.ownerName,
-      address: payload.address,
-      district: payload.district,
-      email: payload.email,
-      phone: payload.phone,
-      approxWeight: payload.approxWeight ?? undefined,
-      specialNotes: payload.specialNotes,
-    };
 
     const requestDoc = await finaliseBooking({
       user,
-      payload: bookingDetails,
+      payload: {
+        itemType: payload.itemType,
+        quantity: payload.quantity,
+        preferredDateTime: payload.preferredDateTime,
+        residentName: payload.residentName,
+        ownerName: payload.ownerName,
+        address: payload.address,
+        district: payload.district,
+        email: payload.email,
+        phone: payload.phone,
+        approxWeight: payload.approxWeight ?? undefined,
+        specialNotes: payload.specialNotes,
+      },
       slot,
       payment,
-      paymentReference: payment.required && !deferPayment
-        ? (payload.paymentReference || `PAY-${Date.now()}`)
-        : undefined,
+      paymentReference:
+        payment.required && !deferPayment
+          ? payload.paymentReference || `PAY-${Date.now()}`
+          : undefined,
       paymentDoc: null,
       provider: 'internal-simulator',
       itemPolicy: policy,
@@ -660,19 +671,15 @@ async function confirmBooking(req, res, next) {
     if (error instanceof z.ZodError) return handleZodError(res, error);
     if (error.code === 'USER_NOT_FOUND') return respondWithError(res, 404, error.message);
     if (error.code === 'ACCOUNT_INACTIVE') return respondWithError(res, 403, error.message);
-    if (error.code === 'SLOT_FULL') {
-      await SpecialCollectionPayment.updateOne({ stripeSessionId: req.params.sessionId }, {
-        $set: { status: 'failed', reference: req.params.sessionId },
-      });
-      return respondWithError(res, 409, error.message);
-    }
+    if (error.code === 'SLOT_FULL') return respondWithError(res, 409, error.message);
     return next(error);
   }
 }
 
+// ✅ RAZORPAY: creates a Razorpay order and returns orderId + keyId to the frontend.
 async function startCheckout(req, res, next) {
   try {
-    if (!stripe) return respondWithError(res, 503, 'Online payments are currently unavailable.');
+    if (!razorpay) return respondWithError(res, 503, 'Online payments are currently unavailable.');
 
     const payload = checkoutInitSchema.parse(req.body);
     const user = await resolveUser(payload.userId);
@@ -682,25 +689,31 @@ async function startCheckout(req, res, next) {
     if (!policy.allow) return res.status(400).json(buildDisallowedResponse(policy));
 
     const preferred = toDate(payload.preferredDateTime);
-    if (Number.isNaN(preferred.getTime())) return respondWithError(res, 400, 'Preferred date/time is invalid.');
+    if (Number.isNaN(preferred.getTime()))
+      return respondWithError(res, 400, 'Preferred date/time is invalid.');
 
     const payment = calculatePayment(policy, payload.quantity, payload.approxWeight);
     if (!payment.required) return res.json({ ok: true, paymentRequired: false });
 
     const slotCandidates = generateCandidateSlots(preferred, SLOT_CONFIG);
-    const sameDayCandidates = filterCandidatesForPreferredDay(slotCandidates, preferred);
-    const slot = sameDayCandidates.find(candidate => candidate.slotId === payload.slotId);
+    const slot = filterCandidatesForPreferredDay(slotCandidates, preferred).find(
+      c => c.slotId === payload.slotId,
+    );
     if (!slot) return respondWithError(res, 400, 'Selected slot is no longer available.');
 
     const existing = await SpecialCollectionRequest.countDocuments({
       'slot.slotId': slot.slotId,
       status: { $in: ['scheduled', 'pending-payment'] },
     });
-    const pendingPayments = await SpecialCollectionPayment.countDocuments({ slotId: slot.slotId, status: 'pending' });
+    const pendingPayments = await SpecialCollectionPayment.countDocuments({
+      slotId: slot.slotId,
+      status: 'pending',
+    });
     if (existing + pendingPayments >= SLOT_CONFIG.maxRequestsPerSlot) {
       return respondWithError(res, 409, 'This slot has just been booked. Please choose another slot.');
     }
 
+    // Store metadata so verifyCheckout can reconstruct the booking.
     const metadata = sanitizeMetadata({
       userId: user._id.toString(),
       itemType: payload.itemType,
@@ -722,90 +735,78 @@ async function startCheckout(req, res, next) {
       specialNotes: payload.specialNotes,
     });
 
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      customer_email: user.email,
-      success_url: payload.successUrl,
-      cancel_url: payload.cancelUrl,
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'inr', // ✅ CHANGE 7: INR
-            product_data: { name: `GHMC special waste collection - ${policy.label}` },
-            unit_amount: Math.round(payment.amount * 100),
-          },
-          quantity: 1,
-        },
-      ],
-      metadata,
+    // Create Razorpay order (amount in paise).
+    const order = await razorpay.orders.create({
+      amount: Math.round(payment.amount * 100),
+      currency: 'INR',
+      receipt: `SC-${Date.now()}`,
+      notes: { userId: user._id.toString(), itemType: payload.itemType },
     });
 
+    // Persist pending payment doc so verifyCheckout can find it by orderId.
     const paymentDoc = await SpecialCollectionPayment.create({
       userId: user._id,
       amount: payment.amount,
-      currency: 'INR', // ✅ CHANGE 7: INR
+      currency: 'INR',
       status: 'pending',
-      provider: 'stripe',
-      reference: undefined,
-      stripeSessionId: session.id,
+      provider: 'razorpay',
+      razorpayOrderId: order.id,
       slotId: slot.slotId,
       metadata,
     });
 
     return res.json({
       ok: true,
-      checkoutUrl: session.url,
-      sessionId: session.id,
+      orderId: order.id,
+      amount: order.amount,     // paise
+      currency: order.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
       paymentId: paymentDoc._id,
+      prefill: { name: user.name || '', email: user.email || '' },
+      description: `GHMC special waste collection – ${policy.label}`,
     });
   } catch (error) {
     if (error instanceof z.ZodError) return res.status(400).json({ ok: false, message: error.errors[0].message });
     if (error.code === 'USER_NOT_FOUND') return res.status(404).json({ ok: false, message: error.message });
     if (error.code === 'ACCOUNT_INACTIVE') return res.status(403).json({ ok: false, message: error.message });
-    if (error.type === 'StripeInvalidRequestError') return res.status(400).json({ ok: false, message: error.message });
     return next(error);
   }
 }
 
-async function syncCheckout(req, res, next) {
+// ✅ RAZORPAY: frontend calls this after the Razorpay modal fires its success
+// callback.  We verify the signature and then call finaliseBooking.
+async function verifyCheckout(req, res, next) {
   try {
-    if (!stripe) return res.status(503).json({ ok: false, message: 'Online payments are currently unavailable.' });
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId } =
+      verifyCheckoutSchema.parse(req.body);
 
-    const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(req.params);
-    const { status: redirectStatus } = z.object({ status: z.enum(['success', 'cancelled']).optional() }).parse(req.query);
-
-    const paymentDoc = await SpecialCollectionPayment.findOne({ stripeSessionId: sessionId });
-    if (!paymentDoc) {
-      return res.status(404).json({ ok: false, message: 'Checkout session not found. Please retry your booking.' });
+    // Server-side signature verification.
+    const isValid = verifyRazorpaySignature(
+      `${razorpay_order_id}|${razorpay_payment_id}`,
+      process.env.RAZORPAY_KEY_SECRET,
+      razorpay_signature,
+    );
+    if (!isValid) {
+      return respondWithError(res, 400, 'Payment verification failed — invalid signature');
     }
 
-    if (paymentDoc.status === 'success' && paymentDoc.requestId) {
-      const existingRequest = await SpecialCollectionRequest.findById(paymentDoc.requestId).lean();
-      return res.json({ ok: true, status: 'success', request: existingRequest });
-    }
-
-    const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ['payment_intent', 'payment_intent.charges.data'],
+    const paymentDoc = await SpecialCollectionPayment.findOne({
+      razorpayOrderId: razorpay_order_id,
     });
+    if (!paymentDoc) {
+      return res.status(404).json({ ok: false, message: 'Checkout session not found.' });
+    }
 
-    const paymentIntent = typeof session.payment_intent === 'string'
-      ? await stripe.paymentIntents.retrieve(session.payment_intent)
-      : session.payment_intent;
+    // Guard against double-processing.
+    if (paymentDoc.status === 'success' && paymentDoc.requestId) {
+      const existing = await SpecialCollectionRequest.findById(paymentDoc.requestId).lean();
+      return res.json({ ok: true, status: 'success', request: existing });
+    }
 
-    const intentStatus = paymentIntent?.status;
-    const paymentSucceeded = session.payment_status === 'paid' || intentStatus === 'succeeded';
-    const paymentFailed = redirectStatus === 'cancelled'
-      || intentStatus === 'canceled'
-      || intentStatus === 'requires_payment_method'
-      || session.status === 'expired';
-
-    const metadata = { ...(paymentDoc.metadata || {}), ...(session.metadata || {}) };
-
-    const quantityValue = Number(metadata.quantity || metadata.qty || 0);
+    const metadata = paymentDoc.metadata || {};
     const payload = {
       itemType: metadata.itemType,
-      quantity: quantityValue,
+      quantity: Number(metadata.quantity || 0),
       preferredDateTime: metadata.preferredDateTime,
       residentName: metadata.residentName,
       ownerName: metadata.ownerName,
@@ -817,73 +818,34 @@ async function syncCheckout(req, res, next) {
       specialNotes: metadata.specialNotes,
     };
 
-    if (
-      !payload.itemType
-      || Number.isNaN(payload.quantity)
-      || payload.quantity < 1
-      || !payload.preferredDateTime
-      || !metadata.slotId
-      || !payload.residentName
-      || !payload.ownerName
-      || !payload.address
-      || !payload.district
-      || !payload.email
-      || !payload.phone
-      || (payload.approxWeight !== undefined && (Number.isNaN(payload.approxWeight) || payload.approxWeight <= 0))
-    ) {
-      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, {
-        $set: { status: 'failed', reference: paymentIntent?.id || sessionId },
-      });
-      return res.status(400).json({ ok: false, message: 'Incomplete payment metadata. Please start a new booking.' });
+    const policy = findItemPolicy(payload.itemType);
+    if (!policy || !policy.allow) {
+      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, { $set: { status: 'failed' } });
+      return res.status(400).json({ ok: false, message: 'Item type is not eligible.' });
     }
 
     const preferred = toDate(payload.preferredDateTime);
-    const policy = findItemPolicy(payload.itemType);
-    if (!policy || !policy.allow) {
-      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, {
-        $set: { status: 'failed', reference: paymentIntent?.id || sessionId },
-      });
-      return res.status(400).json({ ok: false, message: 'The requested item type is not eligible for special collection.' });
-    }
-
     const slotCandidates = generateCandidateSlots(preferred, SLOT_CONFIG);
-    const slot = slotCandidates.find(candidate => candidate.slotId === metadata.slotId);
-    if (!slot || slot.end <= new Date()) {
-      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, {
-        $set: { status: 'failed', reference: paymentIntent?.id || sessionId },
-      });
-      return res.status(409).json({ ok: false, message: 'The chosen slot is no longer available. Please select a new time.' });
+    const slot = slotCandidates.find(c => c.slotId === metadata.slotId);
+    if (!slot) {
+      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, { $set: { status: 'failed' } });
+      return res.status(409).json({ ok: false, message: 'The chosen slot is no longer available.' });
     }
 
     const payment = calculatePayment(policy, payload.quantity, payload.approxWeight);
+    const user = await resolveUser(userId);
 
-    if (!paymentSucceeded) {
-      if (paymentFailed) {
-        await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, {
-          $set: { status: 'failed', reference: paymentIntent?.id || sessionId },
-        });
-        return res.status(402).json({ ok: false, message: 'Payment was not completed. Your pickup was not scheduled.' });
-      }
-      return res.json({ ok: true, status: 'pending', message: 'Payment is still pending confirmation. Please refresh in a moment.' });
-    }
+    // Attach payment IDs so finaliseBooking can persist them.
+    paymentDoc.razorpayPaymentId = razorpay_payment_id;
 
-    const user = await resolveUser(paymentDoc.userId.toString());
-    if (!payment.required) {
-      await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, {
-        $set: { status: 'failed', reference: paymentIntent?.id || sessionId },
-      });
-      return res.status(400).json({ ok: false, message: 'Payment metadata indicates zero amount. Please contact support.' });
-    }
-
-    // finaliseBooking already awards points internally via awardPickupPoints
     const requestDoc = await finaliseBooking({
       user,
       payload,
       slot,
       payment,
-      paymentReference: paymentIntent?.id || sessionId,
+      paymentReference: razorpay_payment_id,
       paymentDoc,
-      provider: 'stripe',
+      provider: 'razorpay',
       itemPolicy: policy,
     });
 
@@ -893,8 +855,107 @@ async function syncCheckout(req, res, next) {
     if (error.code === 'USER_NOT_FOUND') return respondWithError(res, 404, error.message);
     if (error.code === 'ACCOUNT_INACTIVE') return respondWithError(res, 403, error.message);
     if (error.code === 'SLOT_FULL') return respondWithError(res, 409, error.message);
-    if (error.type === 'StripeInvalidRequestError') return respondWithError(res, 400, error.message);
     return next(error);
+  }
+}
+
+// ✅ RAZORPAY WEBHOOK: safety net in case the user closes the tab before
+// verifyCheckout is called.
+async function handleRazorpayWebhook(req, res) {
+  const sig = req.headers['x-razorpay-signature'];
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET_SCHEDULING;
+
+  if (!webhookSecret) {
+    console.error('[scheduling webhook] RAZORPAY_WEBHOOK_SECRET_SCHEDULING not set');
+    return res.status(500).json({ ok: false, message: 'Webhook secret not configured' });
+  }
+
+  const isValid = verifyRazorpaySignature(req.body, webhookSecret, sig);
+  if (!isValid) {
+    return res.status(400).json({ ok: false, message: 'Invalid webhook signature' });
+  }
+
+  let event;
+  try {
+    event = JSON.parse(req.body.toString());
+  } catch {
+    return res.status(400).json({ ok: false, message: 'Invalid JSON body' });
+  }
+
+  console.log(`[scheduling webhook] Event: ${event.event}`);
+
+  try {
+    if (event.event === 'payment.captured') {
+      const payment = event.payload?.payment?.entity;
+      if (!payment?.order_id) return res.json({ received: true });
+
+      const paymentDoc = await SpecialCollectionPayment.findOne({
+        razorpayOrderId: payment.order_id,
+      });
+      if (!paymentDoc || paymentDoc.status === 'success') return res.json({ received: true });
+
+      const metadata = paymentDoc.metadata || {};
+      const payload = {
+        itemType: metadata.itemType,
+        quantity: Number(metadata.quantity || 0),
+        preferredDateTime: metadata.preferredDateTime,
+        residentName: metadata.residentName,
+        ownerName: metadata.ownerName,
+        address: metadata.address,
+        district: metadata.district,
+        email: metadata.email,
+        phone: metadata.phone,
+        approxWeight: metadata.approxWeight ? Number(metadata.approxWeight) : undefined,
+        specialNotes: metadata.specialNotes,
+      };
+
+      const policy = findItemPolicy(payload.itemType);
+      if (!policy || !policy.allow) {
+        await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, { $set: { status: 'failed' } });
+        return res.json({ received: true });
+      }
+
+      const preferred = toDate(payload.preferredDateTime);
+      const slotCandidates = generateCandidateSlots(preferred, SLOT_CONFIG);
+      const slot = slotCandidates.find(c => c.slotId === metadata.slotId);
+      if (!slot) {
+        await SpecialCollectionPayment.updateOne({ _id: paymentDoc._id }, { $set: { status: 'failed' } });
+        return res.json({ received: true });
+      }
+
+      const paymentCalc = calculatePayment(policy, payload.quantity, payload.approxWeight);
+      const user = await resolveUser(paymentDoc.userId.toString());
+
+      paymentDoc.razorpayPaymentId = payment.id;
+
+      await finaliseBooking({
+        user,
+        payload,
+        slot,
+        payment: paymentCalc,
+        paymentReference: payment.id,
+        paymentDoc,
+        provider: 'razorpay',
+        itemPolicy: policy,
+      });
+
+      console.log(`✅ [scheduling webhook] Booking finalised for order ${payment.order_id}`);
+    }
+
+    if (event.event === 'payment.failed') {
+      const payment = event.payload?.payment?.entity;
+      if (payment?.order_id) {
+        await SpecialCollectionPayment.updateOne(
+          { razorpayOrderId: payment.order_id },
+          { $set: { status: 'failed' } },
+        );
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (err) {
+    console.error('[scheduling webhook] Error:', err);
+    return res.status(500).json({ ok: false, message: 'Webhook handler failed' });
   }
 }
 
@@ -905,9 +966,12 @@ async function listUserRequests(req, res, next) {
     const requests = await SpecialCollectionRequest.find({ userId }).sort({ createdAt: -1 }).lean();
     return res.json({ ok: true, requests });
   } catch (error) {
-    if (error instanceof z.ZodError) return res.status(400).json({ ok: false, message: error.errors[0].message });
-    if (error.code === 'USER_NOT_FOUND') return res.status(404).json({ ok: false, message: error.message });
-    if (error.code === 'ACCOUNT_INACTIVE') return res.status(403).json({ ok: false, message: error.message });
+    if (error instanceof z.ZodError)
+      return res.status(400).json({ ok: false, message: error.errors[0].message });
+    if (error.code === 'USER_NOT_FOUND')
+      return res.status(404).json({ ok: false, message: error.message });
+    if (error.code === 'ACCOUNT_INACTIVE')
+      return res.status(403).json({ ok: false, message: error.message });
     return next(error);
   }
 }
@@ -920,12 +984,10 @@ async function downloadReceipt(req, res, next) {
     await resolveUser(userId);
 
     const requestDoc = await SpecialCollectionRequest.findById(requestId).lean();
-    if (!requestDoc) {
-      return res.status(404).json({ ok: false, message: 'Receipt not found. Please refresh your bookings.' });
-    }
-    if (requestDoc.userId?.toString?.() !== userId) {
-      return res.status(403).json({ ok: false, message: 'You are not authorised to download this receipt.' });
-    }
+    if (!requestDoc)
+      return res.status(404).json({ ok: false, message: 'Receipt not found.' });
+    if (requestDoc.userId?.toString() !== userId)
+      return res.status(403).json({ ok: false, message: 'Not authorised to download this receipt.' });
 
     const buffer = await generateSpecialCollectionReceipt({
       request: requestDoc,
@@ -934,12 +996,14 @@ async function downloadReceipt(req, res, next) {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="special-collection-receipt-${requestId}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="special-collection-receipt-${requestId}.pdf"`,
+    );
     return res.send(buffer);
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError)
       return res.status(400).json({ ok: false, message: error.errors[0]?.message || 'Invalid request' });
-    }
     return next(error);
   }
 }
@@ -949,7 +1013,8 @@ module.exports = {
   checkAvailability,
   confirmBooking,
   startCheckout,
-  syncCheckout,
+  verifyCheckout,      // ✅ NEW
+  handleRazorpayWebhook, // ✅ NEW
   listUserRequests,
   downloadReceipt,
 };

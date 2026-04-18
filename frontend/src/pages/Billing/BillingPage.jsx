@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
-import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material'
-import { Banknote, CreditCard, Download, ExternalLink, Info, Receipt, RefreshCcw, Wallet } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
-const UPI_ID = '6309892648@axl'
-const UPI_NAME = 'Smart Waste Hyderabad'
+import {
+  Alert, Box, Button, Card, CardContent, Chip, CircularProgress,
+  Divider, Grid, IconButton, Stack, Tooltip, Typography,
+} from '@mui/material'
+import { Banknote, CreditCard, Download, ExternalLink, Receipt, RefreshCcw, Wallet } from 'lucide-react'
+
+// ─── Razorpay helpers ─────────────────────────────────────────────────────────
+
+// Loads checkout.js once and resolves when window.Razorpay is available.
+function loadRazorpayScript() {
+  return new Promise(resolve => {
+    if (window.Razorpay) { resolve(true); return; }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
+
+// ─── Currency formatting ──────────────────────────────────────────────────────
 
 const CURRENCY_FORMATTERS = new Map()
 const MS_PER_DAY = 86_400_000
@@ -14,11 +30,7 @@ function getCurrencyFormatter(currency) {
   if (!CURRENCY_FORMATTERS.has(key)) {
     CURRENCY_FORMATTERS.set(
       key,
-      new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: key,
-        minimumFractionDigits: 2,
-      }),
+      new Intl.NumberFormat('en-IN', { style: 'currency', currency: key, minimumFractionDigits: 2 }),
     )
   }
   return CURRENCY_FORMATTERS.get(key)
@@ -26,11 +38,8 @@ function getCurrencyFormatter(currency) {
 
 function formatCurrency(amount, currency = 'INR') {
   if (typeof amount !== 'number' || Number.isNaN(amount)) return '--'
-  try {
-    return getCurrencyFormatter(currency).format(amount)
-  } catch {
-    return `₹${amount.toFixed(2)}`
-  }
+  try { return getCurrencyFormatter(currency).format(amount) }
+  catch { return `₹${amount.toFixed(2)}` }
 }
 
 function computeDueInDays(dueDate) {
@@ -42,92 +51,7 @@ function computeDueInDays(dueDate) {
   return Math.round(diff)
 }
 
-// ✅ UPI Payment Dialog
-function UpiPaymentDialog({ open, onClose, bill, onConfirm, confirming }) {
-  const [utrNumber, setUtrNumber] = useState('')
-  const [utrError, setUtrError] = useState('')
-
-  const amount = bill?.amount ?? 0
-  const currency = bill?.currency || 'INR'
-
-  const upiUrl = useMemo(() => (
-    `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent(`Bill: ${bill?.invoiceNumber || ''}`)}`
-  ), [amount, bill?.invoiceNumber])
-
-  const handleConfirm = () => {
-    if (!utrNumber.trim() || utrNumber.trim().length < 6) {
-      setUtrError('Please enter a valid UTR / transaction ID (min 6 characters)')
-      return
-    }
-    onConfirm(bill, `UPI-${utrNumber.trim().toUpperCase()}`)
-  }
-
-  const handleClose = () => {
-    setUtrNumber('')
-    setUtrError('')
-    onClose()
-  }
-
-  return (
-    <Dialog open={open} onClose={confirming ? undefined : handleClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pt: 3 }}>
-        Pay via UPI
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2.5} alignItems="center">
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            Scan the QR code using GPay, PhonePe, Paytm or any UPI app
-          </Typography>
-
-          {/* Auto-generated QR code */}
-          <Box sx={{ border: '2px solid', borderColor: 'divider', borderRadius: 2, p: 1 }}>
-  <QRCodeSVG value={upiUrl} size={200} />
-</Box>
-
-          <Box sx={{ bgcolor: 'grey.50', borderRadius: 2, p: 2, width: '100%', textAlign: 'center' }}>
-            <Typography variant="caption" color="text.secondary">UPI ID</Typography>
-            <Typography variant="subtitle1" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
-              {UPI_ID}
-            </Typography>
-            <Typography variant="h5" fontWeight={700} color="primary.main" sx={{ mt: 1 }}>
-              {formatCurrency(amount, currency)}
-            </Typography>
-            {bill?.invoiceNumber ? (
-              <Typography variant="caption" color="text.secondary">
-                Invoice: {bill.invoiceNumber}
-              </Typography>
-            ) : null}
-          </Box>
-
-          <Alert severity="info" icon={<Info size={18} />} sx={{ width: '100%' }}>
-            After paying, enter the UTR / Transaction ID shown in your UPI app to confirm.
-          </Alert>
-
-          <TextField
-            label="UTR / Transaction ID"
-            value={utrNumber}
-            onChange={e => { setUtrNumber(e.target.value); setUtrError('') }}
-            error={Boolean(utrError)}
-            helperText={utrError || 'e.g. 405813XXXXXX (from your UPI app)'}
-            fullWidth
-            inputProps={{ style: { textTransform: 'uppercase', letterSpacing: 1 } }}
-          />
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={handleClose} disabled={confirming}>Cancel</Button>
-        <Button
-          onClick={handleConfirm}
-          variant="contained"
-          disabled={confirming || !utrNumber.trim()}
-          startIcon={confirming ? <CircularProgress size={16} color="inherit" /> : null}
-        >
-          {confirming ? 'Confirming…' : 'Confirm Payment'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
+// ─── BillCard ─────────────────────────────────────────────────────────────────
 
 function BillCard({ bill, onPay, processing }) {
   const dueInDays = computeDueInDays(bill.dueDate)
@@ -151,15 +75,18 @@ function BillCard({ bill, onPay, processing }) {
                 size="small"
               />
               <Chip
-                color="info"
-                variant="outlined"
-                size="small"
+                color="info" variant="outlined" size="small"
                 label={new Date(bill.dueDate).toLocaleDateString('en-GB')}
               />
             </Stack>
           </Stack>
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={3}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            spacing={3}
+          >
             <Box>
               <Typography variant="subtitle2" color="text.secondary">Amount due</Typography>
               <Typography variant="h5" fontWeight={600}>
@@ -172,7 +99,7 @@ function BillCard({ bill, onPay, processing }) {
               disabled={processing}
               startIcon={processing ? <CircularProgress size={18} color="inherit" /> : <CreditCard size={18} />}
             >
-              {processing ? 'Processing…' : 'Pay now via UPI'}
+              {processing ? 'Processing…' : 'Pay now'}
             </Button>
           </Stack>
         </Stack>
@@ -194,6 +121,8 @@ BillCard.propTypes = {
   processing: PropTypes.bool.isRequired,
 }
 
+// ─── PaidBillRow ──────────────────────────────────────────────────────────────
+
 function PaidBillRow({ bill, onDownloadReceipt }) {
   const transaction = bill.latestTransaction
   const receiptAvailable = Boolean(transaction?.receiptUrl)
@@ -201,7 +130,12 @@ function PaidBillRow({ bill, onDownloadReceipt }) {
   return (
     <Card className="rounded-2xl border border-slate-200/70 shadow-sm">
       <CardContent>
-        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} justifyContent="space-between" spacing={3}>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          alignItems={{ md: 'center' }}
+          justifyContent="space-between"
+          spacing={3}
+        >
           <Box>
             <Typography variant="subtitle1" fontWeight={600}>{bill.invoiceNumber}</Typography>
             <Typography variant="body2" color="text.secondary">
@@ -210,21 +144,32 @@ function PaidBillRow({ bill, onDownloadReceipt }) {
           </Box>
           <Stack direction="row" spacing={2} alignItems="center">
             <Chip
-              size="small"
-              color="success"
-              label={`Paid · ${transaction?.paymentMethod?.toUpperCase() || 'UPI'}`}
+              size="small" color="success"
+              label={`Paid · ${transaction?.paymentMethod?.toUpperCase() || 'RAZORPAY'}`}
             />
             <Typography variant="subtitle1" fontWeight={600}>
               {formatCurrency(bill.amount, bill.currency)}
             </Typography>
             {receiptAvailable ? (
-              <Button variant="outlined" component="a" href={transaction.receiptUrl} target="_blank" rel="noopener" startIcon={<ExternalLink size={16} />}>
+              <Button
+                variant="outlined"
+                component="a"
+                href={transaction.receiptUrl}
+                target="_blank"
+                rel="noopener"
+                startIcon={<ExternalLink size={16} />}
+              >
                 View receipt
               </Button>
             ) : (
               <Tooltip title="Download receipt">
                 <span>
-                  <Button variant="outlined" startIcon={<Download size={16} />} onClick={() => onDownloadReceipt(transaction?._id)} disabled={!transaction?._id}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<Download size={16} />}
+                    onClick={() => onDownloadReceipt(transaction?._id)}
+                    disabled={!transaction?._id}
+                  >
                     Download receipt
                   </Button>
                 </span>
@@ -253,15 +198,14 @@ PaidBillRow.propTypes = {
   onDownloadReceipt: PropTypes.func.isRequired,
 }
 
+// ─── Main BillingPage ─────────────────────────────────────────────────────────
+
 export default function BillingPage({ session = null, variant = 'page' }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const [processingBillId, setProcessingBillId] = useState(null)
   const [receiptFeedback, setReceiptFeedback] = useState(null)
-  const [upiDialogOpen, setUpiDialogOpen] = useState(false)
-  const [selectedBill, setSelectedBill] = useState(null)
-  const [upiConfirming, setUpiConfirming] = useState(false)
 
   const userId = useMemo(() => session?.id || session?._id || null, [session])
 
@@ -288,38 +232,88 @@ export default function BillingPage({ session = null, variant = 'page' }) {
   const paidBills = useMemo(() => data?.bills?.paid ?? [], [data])
   const summary = useMemo(() => data?.summary ?? null, [data])
 
-  // ✅ Opens UPI dialog instead of Stripe
-  const handlePay = useCallback((bill) => {
-    setSelectedBill(bill)
-    setUpiDialogOpen(true)
-  }, [])
-
-  // ✅ Confirms payment with UTR reference
-  const handleUpiConfirm = useCallback(async (bill, paymentReference) => {
-    if (!userId || !bill) return
-    setUpiConfirming(true)
+  // ✅ RAZORPAY: open Razorpay checkout modal when user clicks "Pay now"
+  const handlePay = useCallback(async (bill) => {
+    if (!userId) return
+    setProcessingBillId(bill._id)
     setError(null)
+
     try {
-      const response = await fetch('/api/billing/pay-upi', {
+      // 1. Load Razorpay checkout script
+      const loaded = await loadRazorpayScript()
+      if (!loaded) throw new Error('Failed to load payment gateway. Please try again.')
+
+      // 2. Create a Razorpay order on the backend
+      const orderRes = await fetch('/api/billing/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          billId: bill._id,
-          paymentReference,
-          paymentMethod: 'upi',
-        }),
+        body: JSON.stringify({ userId, billId: bill._id }),
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.message || 'Payment confirmation failed')
-      setUpiDialogOpen(false)
-      setSelectedBill(null)
-      await loadBills()
+      const orderData = await orderRes.json()
+      if (!orderRes.ok) throw new Error(orderData.message || 'Could not initiate payment')
+
+      // 3. Open Razorpay modal
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: orderData.keyId,
+          amount: orderData.amount,         // in paise
+          currency: orderData.currency,
+          name: 'GHMC Smart Waste',
+          description: orderData.description || `Invoice ${bill.invoiceNumber}`,
+          order_id: orderData.orderId,
+          prefill: orderData.prefill || {},
+          theme: { color: '#2563eb' },
+          // ✅ Show UPI as the first block, then all other methods below
+          config: {
+            display: {
+              blocks: {
+                upi_block: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+              },
+              sequence: ['block.upi_block'],
+              preferences: { show_default_blocks: true },
+            },
+          },
+          modal: {
+            ondismiss: () => {
+              // User closed the modal without paying
+              setProcessingBillId(null)
+              resolve()
+            },
+          },
+          handler: async (response) => {
+            try {
+              // 4. Verify payment on the backend
+              const verifyRes = await fetch('/api/billing/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  billId: bill._id,
+                  userId,
+                }),
+              })
+              const verifyData = await verifyRes.json()
+              if (!verifyRes.ok) throw new Error(verifyData.message || 'Payment verification failed')
+              // 5. Refresh bills to show paid status
+              await loadBills()
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
+          },
+        }
+
+        const rzp = new window.Razorpay(options)
+        rzp.on('payment.failed', (response) => {
+          reject(new Error(response.error?.description || 'Payment failed'))
+        })
+        rzp.open()
+      })
     } catch (err) {
       setError(err.message)
-      setUpiDialogOpen(false)
-    } finally {
-      setUpiConfirming(false)
+      setProcessingBillId(null)
     }
   }, [userId, loadBills])
 
@@ -331,8 +325,8 @@ export default function BillingPage({ session = null, variant = 'page' }) {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.message || 'Unable to fetch receipt')
 
-      const receiptBlob = new Blob([JSON.stringify(payload.receipt, null, 2)], { type: 'application/json' })
-      const blobUrl = URL.createObjectURL(receiptBlob)
+      const blob = new Blob([JSON.stringify(payload.receipt, null, 2)], { type: 'application/json' })
+      const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = blobUrl
       link.download = `receipt-${payload.receipt.invoiceNumber || transactionId}.json`
@@ -357,15 +351,30 @@ export default function BillingPage({ session = null, variant = 'page' }) {
       <Stack spacing={5} className={panelClass}>
         <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={3}>
           <Box>
-            <Chip icon={<Wallet size={16} />} label="Resident billing centre" color="primary" variant="outlined" sx={{ fontWeight: 600, borderRadius: '999px' }} />
-            <Typography variant="h4" fontWeight={600} mt={2}>Manage your municipal waste bills</Typography>
+            <Chip
+              icon={<Wallet size={16} />}
+              label="Resident billing centre"
+              color="primary"
+              variant="outlined"
+              sx={{ fontWeight: 600, borderRadius: '999px' }}
+            />
+            <Typography variant="h4" fontWeight={600} mt={2}>
+              Manage your municipal waste bills
+            </Typography>
             <Typography variant="body1" color="text.secondary" mt={1.5}>
-              Review outstanding invoices, pay via UPI, and download payment receipts once settled.
+              Review outstanding invoices, pay securely via Razorpay (UPI, Rupay, cards, net banking),
+              and download payment receipts once settled.
             </Typography>
           </Box>
           <Tooltip title="Refresh billing data">
             <span>
-              <IconButton onClick={loadBills} disabled={loading} color="primary" size="medium" aria-label="Refresh billing data">
+              <IconButton
+                onClick={loadBills}
+                disabled={loading}
+                color="primary"
+                size="medium"
+                aria-label="Refresh billing data"
+              >
                 {loading ? <CircularProgress size={20} /> : <RefreshCcw size={18} />}
               </IconButton>
             </span>
@@ -373,7 +382,11 @@ export default function BillingPage({ session = null, variant = 'page' }) {
         </Stack>
 
         {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
-        {receiptFeedback && <Alert severity={receiptFeedback.type} onClose={() => setReceiptFeedback(null)}>{receiptFeedback.message}</Alert>}
+        {receiptFeedback && (
+          <Alert severity={receiptFeedback.type} onClose={() => setReceiptFeedback(null)}>
+            {receiptFeedback.message}
+          </Alert>
+        )}
 
         {loading ? (
           <Box display="flex" justifyContent="center" py={8}><CircularProgress /></Box>
@@ -381,7 +394,12 @@ export default function BillingPage({ session = null, variant = 'page' }) {
           <Stack spacing={5}>
             <Card className="rounded-3xl border border-slate-200/80 bg-slate-50/70">
               <CardContent>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems={{ md: 'center' }} justifyContent="space-between">
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={3}
+                  alignItems={{ md: 'center' }}
+                  justifyContent="space-between"
+                >
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Banknote className="h-8 w-8 text-brand-600" />
                     <div>
@@ -405,7 +423,7 @@ export default function BillingPage({ session = null, variant = 'page' }) {
                     <CreditCard className="h-8 w-8 text-brand-600" />
                     <Typography variant="h6" fontWeight={600}>You are all caught up!</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      There are no outstanding invoices. When new bills are generated, they will appear here for payment.
+                      There are no outstanding invoices. When new bills are generated, they will appear here.
                     </Typography>
                   </Stack>
                 </CardContent>
@@ -449,15 +467,6 @@ export default function BillingPage({ session = null, variant = 'page' }) {
           </Stack>
         )}
       </Stack>
-
-      {/* ✅ UPI Payment Dialog */}
-      <UpiPaymentDialog
-        open={upiDialogOpen}
-        onClose={() => { setUpiDialogOpen(false); setSelectedBill(null) }}
-        bill={selectedBill}
-        onConfirm={handleUpiConfirm}
-        confirming={upiConfirming}
-      />
     </div>
   )
 }

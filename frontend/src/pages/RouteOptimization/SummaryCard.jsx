@@ -1,17 +1,27 @@
 import PropTypes from 'prop-types'
 import { memo, useMemo } from 'react'
 
-// Presents the optimized route’s key performance metrics in a compact list.
+// Presents the optimized route's key performance metrics in a compact list.
 function SummaryCard({ plan, summary, directions }) {
-  const items = useMemo(() => ([
-    { label: 'Total bins considered', value: summary?.consideredBins ?? '—' },
-    { label: 'High priority bins', value: summary?.highPriorityBins ?? '—' },
-    { label: 'Estimated distance', value: directions?.distanceKm ? `${directions.distanceKm} km` : `${plan?.distanceKm ?? 0} km` },
-    { label: 'Estimated duration', value: directions?.durationMin ? `${directions.durationMin} min` : '—' },
-    { label: 'Load collected', value: plan?.loadKg ? `${plan.loadKg} kg` : '—' },
-    { label: 'Trucks used', value: summary?.trucks ?? 1 },
-    { label: 'Capacity per truck', value: summary?.truckCapacityKg ? `${summary.truckCapacityKg} kg` : '—' },
-  ]), [directions, plan, summary])
+  const items = useMemo(() => {
+    // ✅ FIX: Show "—" instead of "0 km" when no plan exists
+    const estimatedDistance = (() => {
+      if (!plan) return '—'
+      if (directions?.distanceKm) return `${directions.distanceKm} km`
+      if (plan.distanceKm) return `${plan.distanceKm} km`
+      return '0 km'
+    })()
+
+    return [
+      { label: 'Total bins considered', value: summary?.consideredBins ?? '—' },
+      { label: 'High priority bins', value: summary?.highPriorityBins ?? '—' },
+      { label: 'Estimated distance', value: estimatedDistance },
+      { label: 'Estimated duration', value: directions?.durationMin ? `${directions.durationMin} min` : '—' },
+      { label: 'Load collected', value: plan?.loadKg ? `${plan.loadKg} kg` : '—' },
+      { label: 'Trucks used', value: summary?.trucks ?? 1 },
+      { label: 'Capacity per truck', value: summary?.truckCapacityKg ? `${summary.truckCapacityKg} kg` : '—' },
+    ]
+  }, [directions, plan, summary])
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm">

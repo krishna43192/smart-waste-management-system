@@ -51,29 +51,20 @@ FitBounds.propTypes = {
   points: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number)).isRequired,
 }
 
-/**
- * props:
- *  - plan: { stops:[{lat,lon,binId,estKg,visited}], ... }
- *  - depot: { lat, lon }
- */
-const DEFAULT_DEPOT = Object.freeze({ lat: 6.927, lon: 79.861 })
+// ✅ FIX 2: Changed default depot from Colombo to Secunderabad, Hyderabad
+const DEFAULT_DEPOT = Object.freeze({ lat: 17.440, lon: 78.498 })
 
 // Visualises the optimized depot-to-stops loop for collection crews.
 export default function RouteMap({ plan, depot }) {
   const baseDepot = depot || plan?.depot || DEFAULT_DEPOT
   const stops = plan?.stops ?? []
   const poly = useMemo(() => {
-    if (!stops.length) {
-      return [[baseDepot.lat, baseDepot.lon]]
-    }
+    if (!stops.length) return [[baseDepot.lat, baseDepot.lon]]
     // Close the polyline by mirroring the depot at the start and end of the route.
-    const pts = [[baseDepot.lat, baseDepot.lon], ...stops.map(s => [s.lat, s.lon]), [baseDepot.lat, baseDepot.lon]]
-    return pts
+    return [[baseDepot.lat, baseDepot.lon], ...stops.map(s => [s.lat, s.lon]), [baseDepot.lat, baseDepot.lon]]
   }, [stops, baseDepot])
 
-  // center (fallback to depot)
   const center = [baseDepot.lat, baseDepot.lon]
-
   const hasStops = stops.length >= 1
 
   return (
@@ -91,22 +82,22 @@ export default function RouteMap({ plan, depot }) {
 
         {/* Depot */}
         <Marker position={[baseDepot.lat, baseDepot.lon]} icon={depotIcon()}>
-          <Popup>Depot<br/>Start/End</Popup>
+          <Popup>Depot<br />Start/End</Popup>
         </Marker>
 
         {/* Numbered stop markers */}
-              {stops.map((s, i) => (
+        {stops.map((s, i) => (
           <Marker
             key={s.binId}
             position={[s.lat, s.lon]}
-                    icon={numberIcon(i + 1, s.visited ? '#22c55e' : '#ef4444')}
+            icon={numberIcon(i + 1, s.visited ? '#22c55e' : '#ef4444')}
           >
             <Popup>
               <div style={{ fontWeight: 600 }}>{s.binId}</div>
               <div style={{ fontSize: 12, color: '#475569' }}>
                 {typeof s.lat === 'number' && typeof s.lon === 'number'
                   ? `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`
-                  : 'Location pending'}<br/>
+                  : 'Location pending'}<br />
                 {s.estKg} kg {s.visited ? '• visited' : ''}
               </div>
             </Popup>
@@ -122,10 +113,7 @@ export default function RouteMap({ plan, depot }) {
 
 RouteMap.propTypes = {
   plan: PropTypes.shape({
-    depot: PropTypes.shape({
-      lat: PropTypes.number,
-      lon: PropTypes.number,
-    }),
+    depot: PropTypes.shape({ lat: PropTypes.number, lon: PropTypes.number }),
     stops: PropTypes.arrayOf(PropTypes.shape({
       binId: PropTypes.string.isRequired,
       lat: PropTypes.number,
@@ -134,10 +122,7 @@ RouteMap.propTypes = {
       visited: PropTypes.bool,
     })),
   }),
-  depot: PropTypes.shape({
-    lat: PropTypes.number,
-    lon: PropTypes.number,
-  }),
+  depot: PropTypes.shape({ lat: PropTypes.number, lon: PropTypes.number }),
 }
 
 RouteMap.defaultProps = {

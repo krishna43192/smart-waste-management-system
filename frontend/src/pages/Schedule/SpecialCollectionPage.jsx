@@ -1,15 +1,33 @@
-import { CalendarClock, CheckCircle2, Clock3, Info, MailCheck, RefreshCcw, Truck, Check } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Clock3, Info, MailCheck, RefreshCcw, Truck } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, FormControl, Grid, IconButton, InputLabel, MenuItem, Select, Stack, TextField, Typography, Stepper, Step, StepLabel, Tooltip, } from '@mui/material'
+import {
+  Alert, Box, Button, Card, CardContent, Chip, CircularProgress,
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
+  Divider, FormControl, Grid, IconButton, InputLabel, MenuItem,
+  Select, Stack, Step, StepLabel, Stepper, TextField, Tooltip, Typography,
+} from '@mui/material'
 import dayjs from 'dayjs'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
 import { DigitalClock } from '@mui/x-date-pickers/DigitalClock'
-
 import { useNavigate } from 'react-router-dom'
 import ConfirmationIllustration from '../../assets/Confirmation.png'
-import { QRCodeSVG } from 'qrcode.react'
+
+// ─── Razorpay script loader ────────────────────────────────────────────────────
+
+function loadRazorpayScript() {
+  return new Promise(resolve => {
+    if (window.Razorpay) { resolve(true); return }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const initialFormState = {
   residentName: '',
@@ -49,17 +67,12 @@ const currencyFormatter = new Intl.NumberFormat('en-IN', {
 
 const TAX_RATE_PERCENT = 18
 
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
 function formatCurrency(amount) {
   const value = Number(amount)
   if (!Number.isFinite(value)) return currencyFormatter.format(0)
   return currencyFormatter.format(value)
-}
-
-function toLocalDateValue(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function combineDateAndTime(date, time) {
@@ -76,20 +89,13 @@ function serializeDateTime(value) {
 
 function formatRequestTimestamp(value) {
   if (!value) return '—'
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+  return new Date(value).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function formatSlotRange(slot) {
   if (!slot?.start) return 'Awaiting assignment'
   try {
-    const formatter = new Intl.DateTimeFormat('en-GB', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    })
+    const formatter = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
     const start = formatter.format(new Date(slot.start))
     const end = slot.end ? formatter.format(new Date(slot.end)) : null
     return end ? `${start} → ${end}` : start
@@ -105,43 +111,27 @@ function getSessionId(session) {
 async function safeJson(response) {
   const text = await response.text()
   if (!text) return null
-  try {
-    return JSON.parse(text)
-  } catch (error) {
-    console.warn('Failed to parse JSON payload', error)
-    return null
-  }
+  try { return JSON.parse(text) } catch { return null }
 }
+
+// ─── Hooks ────────────────────────────────────────────────────────────────────
 
 function useSpecialCollectionConfig() {
   const [state, setState] = useState({ loading: true, error: null, items: [], slotConfig: null })
 
   useEffect(() => {
     let cancelled = false
-
     async function loadConfig() {
       try {
         const response = await fetch('/api/schedules/special/config')
         const payload = await safeJson(response)
         if (cancelled) return
-
-        if (!response.ok || payload?.ok === false) {
-          throw new Error(payload?.message || 'Unable to load scheduling configuration')
-        }
-
-        setState({
-          loading: false,
-          error: null,
-          items: payload?.items ?? [],
-          slotConfig: payload?.slotConfig ?? null,
-        })
+        if (!response.ok || payload?.ok === false) throw new Error(payload?.message || 'Unable to load scheduling configuration')
+        setState({ loading: false, error: null, items: payload?.items ?? [], slotConfig: payload?.slotConfig ?? null })
       } catch (error) {
-        if (!cancelled) {
-          setState({ loading: false, error: error.message, items: [], slotConfig: null })
-        }
+        if (!cancelled) setState({ loading: false, error: error.message, items: [], slotConfig: null })
       }
     }
-
     loadConfig()
     return () => { cancelled = true }
   }, [])
@@ -153,26 +143,16 @@ function useResidentRequests(sessionId, onSessionInvalid) {
   const [state, setState] = useState({ loading: false, error: null, requests: [] })
 
   const load = useCallback(async () => {
-    if (!sessionId) {
-      setState({ loading: false, error: null, requests: [] })
-      return
-    }
-
+    if (!sessionId) { setState({ loading: false, error: null, requests: [] }); return }
     setState(prev => ({ ...prev, loading: true, error: null }))
-
     try {
       const response = await fetch(`/api/schedules/special/my?userId=${encodeURIComponent(sessionId)}`)
       const payload = await safeJson(response)
-
       if (!response.ok || payload?.ok === false) {
         const message = payload?.message || 'Unable to load your scheduled pickups'
-        if (response.status === 403 || response.status === 404) {
-          onSessionInvalid?.(message)
-          return
-        }
+        if (response.status === 403 || response.status === 404) { onSessionInvalid?.(message); return }
         throw new Error(message)
       }
-
       setState({ loading: false, error: null, requests: payload?.requests ?? [] })
     } catch (error) {
       setState(prev => ({ ...prev, loading: false, error: error.message, requests: [] }))
@@ -180,9 +160,10 @@ function useResidentRequests(sessionId, onSessionInvalid) {
   }, [sessionId, onSessionInvalid])
 
   useEffect(() => { load() }, [load])
-
   return { ...state, refresh: load }
 }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function RequestForm({
   form, allowedItems, selectedPolicy, onChange, onSubmit, availabilityLoading,
@@ -215,10 +196,7 @@ function RequestForm({
   const setQuickDate = useCallback((when) => {
     let d = dayjs().startOf('day')
     if (when === 'tomorrow') d = d.add(1, 'day')
-    if (when === 'nextMon') {
-      const daysUntilMon = (8 - d.day()) % 7 || 7
-      d = d.add(daysUntilMon, 'day')
-    }
+    if (when === 'nextMon') { const days = (8 - d.day()) % 7 || 7; d = d.add(days, 'day') }
     onChange({ target: { name: 'preferredDate', value: d.format('YYYY-MM-DD') } })
   }, [onChange])
 
@@ -276,9 +254,9 @@ function RequestForm({
                     <Chip size="small" label="Next Mon" onClick={() => setQuickDate('nextMon')} variant="outlined" />
                   </Stack>
                   <Box sx={{ ...pickerBoxSx, flexGrow: 1 }}>
-                    <DateCalendar value={dateValue} onChange={handleDateChange} disablePast minDate={minDate} maxDate={maxDate} shouldDisableDate={disableWeekends ? (d) => [0,6].includes(d.day()) : undefined} />
+                    <DateCalendar value={dateValue} onChange={handleDateChange} disablePast minDate={minDate} maxDate={maxDate} shouldDisableDate={disableWeekends ? (d) => [0, 6].includes(d.day()) : undefined} />
                   </Box>
-                  {touched.preferredDate && errors.preferredDate ? (<Typography variant="caption" color="error.main">{errors.preferredDate}</Typography>) : null}
+                  {touched.preferredDate && errors.preferredDate ? <Typography variant="caption" color="error.main">{errors.preferredDate}</Typography> : null}
                 </Stack>
               </Grid>
               <Grid item xs={12} md={6}>
@@ -293,7 +271,7 @@ function RequestForm({
                   <Box sx={{ ...pickerBoxSx, flexGrow: 1 }}>
                     <DigitalClock value={timeValue} onChange={handleTimeChange} ampm minutesStep={15} minTime={minTime} maxTime={maxTime} skipDisabled timeStep={30} />
                   </Box>
-                  {touched.preferredTime && errors.preferredTime ? (<Typography variant="caption" color="error.main">{errors.preferredTime}</Typography>) : null}
+                  {touched.preferredTime && errors.preferredTime ? <Typography variant="caption" color="error.main">{errors.preferredTime}</Typography> : null}
                 </Stack>
               </Grid>
               <Grid item xs={12}>
@@ -366,7 +344,7 @@ function AvailabilitySection({ availability, loading, onConfirmSlot, bookingInFl
                             {totalWeightKg > 0 ? <> Estimated total weight: {totalWeightKg.toFixed(1)} kg.</> : null}
                             {weightChargeAmount > 0 ? <> Weight surcharge: {formatCurrency(weightChargeAmount)}.</> : null}
                             {taxAmount > 0 ? <> Taxes applied: {formatCurrency(taxAmount)}.</> : null}
-                            {' '}Pay now via UPI or choose to pay later from My Bills.
+                            {' '}Pay now via Razorpay or choose to pay later from My Bills.
                           </Alert>
                         ) : (
                           <Alert severity="success" icon={<CheckCircle2 size={18} />}>
@@ -508,20 +486,19 @@ function ScheduledRequests({ requests, loading, error, allowedItems, onRefresh }
   )
 }
 
-function ConfirmationPanel({ details, onBack, onEdit, allowedItems }) {
+function ConfirmationPanel({ details, allowedItems }) {
   if (!details) return null
 
-  const itemLabel = useMemo(() => {
-    return allowedItems.find(i => i.id === details.request.itemType)?.label || details.request.itemType
-  }, [allowedItems, details.request.itemType])
+  const itemLabel = useMemo(
+    () => allowedItems.find(i => i.id === details.request.itemType)?.label || details.request.itemType,
+    [allowedItems, details.request.itemType],
+  )
 
   const scheduledDate = details.scheduled?.date ? dayjs(details.scheduled.date).format('DD/MM/YYYY') : '—'
   const scheduledTime = details.scheduled?.time ? dayjs(`1970-01-01T${details.scheduled.time}`).format('hh:mm A') : '—'
-
   const qty = Number(details.request.quantity || 0)
   const perItem = Number(details.request.approxWeight || 0)
   const totalApproxWeight = Number.isFinite(qty * perItem) ? qty * perItem : null
-
   const subtotal = Number(details.payment?.baseCharge ?? 0)
   const extra = Number(details.payment?.weightCharge ?? 0)
   const tax = Number(details.payment?.taxCharge ?? 0)
@@ -556,7 +533,9 @@ function ConfirmationPanel({ details, onBack, onEdit, allowedItems }) {
             {isPaymentPending ? (
               <Alert severity="warning" icon={<Clock3 size={18} />}>
                 This booking is reserved, but payment is still outstanding.{' '}
-                {paymentDueMessage ? `Please settle the bill before ${paymentDueMessage} to avoid automatic cancellation.` : 'Please complete your payment before the scheduled slot to avoid automatic cancellation.'}
+                {paymentDueMessage
+                  ? `Please settle the bill before ${paymentDueMessage} to avoid automatic cancellation.`
+                  : 'Please complete your payment before the scheduled slot to avoid automatic cancellation.'}
               </Alert>
             ) : null}
             {isPaymentSuccessful ? (
@@ -571,16 +550,11 @@ function ConfirmationPanel({ details, onBack, onEdit, allowedItems }) {
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">District:</Typography><Typography variant="h6" fontWeight={600}>{details.request.district || '—'}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Item type:</Typography><Typography variant="h6" fontWeight={600}>{itemLabel}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Phone:</Typography><Typography variant="h6" fontWeight={600}>{details.request.phone || '—'}</Typography></Grid>
-              <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Email</Typography><Typography variant="h6" fontWeight={600}>{details.request.email || '—'}</Typography></Grid>
+              <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Email:</Typography><Typography variant="h6" fontWeight={600}>{details.request.email || '—'}</Typography></Grid>
               <Grid item xs={4}><Typography variant="subtitle2" color="text.secondary">Approx. weight:</Typography><Typography variant="h6" fontWeight={600}>{totalApproxWeight ? `${totalApproxWeight.toFixed(0)}kg` : (perItem ? `${perItem}kg` : '—')}</Typography></Grid>
               <Grid item xs={4}><Typography variant="subtitle2" color="text.secondary">Quantity:</Typography><Typography variant="h6" fontWeight={600}>{qty || '—'}</Typography></Grid>
               <Grid item xs={4}><Typography variant="subtitle2" color="text.secondary">Scheduled Time:</Typography><Typography variant="h6" fontWeight={600}>{scheduledTime}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Scheduled Date:</Typography><Typography variant="h6" fontWeight={600}>{scheduledDate}</Typography></Grid>
-              <Grid item xs={6}>
-                {details.payment?.required ? (
-                  <><Typography variant="subtitle2" color="text.secondary">Receipt:</Typography><Button size="small" variant="text" onClick={() => window.print()} sx={{ textDecoration: 'underline', px: 0 }}>Download</Button></>
-                ) : null}
-              </Grid>
             </Grid>
 
             <Box sx={{ mt: 2 }}>
@@ -606,14 +580,12 @@ function ConfirmationPanel({ details, onBack, onEdit, allowedItems }) {
   )
 }
 
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function SpecialCollectionPage({ session, onSessionInvalid }) {
   const navigate = useNavigate()
   const sessionId = getSessionId(session)
   const isAuthenticated = Boolean(sessionId || session?.email)
-
-  // ✅ UPI config — change UPI_ID to your real UPI ID
-  const UPI_ID = '6309892648@axl'
-  const UPI_NAME = 'Smart Waste Hyderabad'
 
   const sessionDefaults = useMemo(() => ({
     residentName: session?.name ?? '',
@@ -666,13 +638,6 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
   const [formError, setFormError] = useState(null)
   const [touched, setTouched] = useState({})
 
-  // ✅ UPI state
-  const [upiDialogOpen, setUpiDialogOpen] = useState(false)
-  const [upiSlot, setUpiSlot] = useState(null)
-  const [utrNumber, setUtrNumber] = useState('')
-  const [utrError, setUtrError] = useState('')
-  const [upiConfirming, setUpiConfirming] = useState(false)
-
   const formErrors = useMemo(() => {
     const errs = {}
     const emailRegex = /.+@.+\..+/
@@ -692,8 +657,8 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     if (!Number.isFinite(weight) || weight <= 0) errs.approxWeight = 'Weight must be greater than 0'
     return errs
   }, [form])
-  const isFormValid = useMemo(() => Object.keys(formErrors).length === 0, [formErrors])
 
+  const isFormValid = useMemo(() => Object.keys(formErrors).length === 0, [formErrors])
   const selectedPolicy = useMemo(() => allowedItems.find(item => item.id === form.itemType), [allowedItems, form.itemType])
 
   const handleFormChange = useCallback(event => {
@@ -709,8 +674,7 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
   }, [])
 
   const handleFormBlur = useCallback(event => {
-    const { name } = event.target
-    setTouched(prev => ({ ...prev, [name]: true }))
+    setTouched(prev => ({ ...prev, [event.target.name]: true }))
   }, [])
 
   const handleResetForm = useCallback(() => {
@@ -726,37 +690,30 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     if (!isAuthenticated) { ensureAuthenticated(); return }
 
     const requiredChecks = [
-      { field: 'residentName', label: 'resident name', validate: value => Boolean(value?.trim()) },
-      { field: 'ownerName', label: "owner's name", validate: value => Boolean(value?.trim()) },
-      { field: 'address', label: 'address', validate: value => Boolean(value?.trim()) },
-      { field: 'district', label: 'district', validate: value => Boolean(value?.trim()) },
-      { field: 'email', label: 'email', validate: value => Boolean(value?.trim()) },
-      { field: 'phone', label: 'phone number', validate: value => Boolean(value?.trim()) },
-      { field: 'itemType', label: 'item type', validate: value => Boolean(value) },
-      { field: 'preferredDate', label: 'date', validate: value => Boolean(value) },
-      { field: 'preferredTime', label: 'time', validate: value => Boolean(value) },
-      { field: 'quantity', label: 'quantity', validate: value => Number(value) >= 1 },
-      { field: 'approxWeight', label: 'approximate weight (kg per item)', validate: value => Number(value) > 0 },
+      { field: 'residentName', label: 'resident name', validate: v => Boolean(v?.trim()) },
+      { field: 'ownerName', label: "owner's name", validate: v => Boolean(v?.trim()) },
+      { field: 'address', label: 'address', validate: v => Boolean(v?.trim()) },
+      { field: 'district', label: 'district', validate: v => Boolean(v?.trim()) },
+      { field: 'email', label: 'email', validate: v => Boolean(v?.trim()) },
+      { field: 'phone', label: 'phone number', validate: v => Boolean(v?.trim()) },
+      { field: 'itemType', label: 'item type', validate: v => Boolean(v) },
+      { field: 'preferredDate', label: 'date', validate: v => Boolean(v) },
+      { field: 'preferredTime', label: 'time', validate: v => Boolean(v) },
+      { field: 'quantity', label: 'quantity', validate: v => Number(v) >= 1 },
+      { field: 'approxWeight', label: 'approximate weight (kg per item)', validate: v => Number(v) > 0 },
     ]
 
-    const failedCheck = requiredChecks.find(check => !check.validate(form[check.field]))
-    if (failedCheck) {
-      setTouched(prev => ({ ...prev, [failedCheck.field]: true }))
-      setFormError(`Please provide a valid ${failedCheck.label}.`)
+    const failed = requiredChecks.find(c => !c.validate(form[c.field]))
+    if (failed) {
+      setTouched(prev => ({ ...prev, [failed.field]: true }))
+      setFormError(`Please provide a valid ${failed.label}.`)
       return
     }
 
-    const combinedDateTime = combineDateAndTime(form.preferredDate, form.preferredTime)
-    const preferredDateTime = serializeDateTime(combinedDateTime)
-    if (!preferredDateTime) {
-      setFormError('Please choose both a date and time in the future before checking availability.')
-      return
-    }
+    const preferredDateTime = serializeDateTime(combineDateAndTime(form.preferredDate, form.preferredTime))
+    if (!preferredDateTime) { setFormError('Please choose both a date and time in the future.'); return }
 
-    setAvailability(null)
-    setFeedback(null)
-    setFormError(null)
-    setAvailabilityLoading(true)
+    setAvailability(null); setFeedback(null); setFormError(null); setAvailabilityLoading(true)
 
     try {
       const response = await fetch('/api/schedules/special/availability', {
@@ -777,11 +734,8 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
           specialNotes: form.specialNotes,
         }),
       })
-
       const payload = await safeJson(response)
-      if (!response.ok || payload?.ok === false) {
-        throw new Error(payload?.message || 'Unable to load availability for the selected day.')
-      }
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.message || 'Unable to load availability for the selected day.')
       setAvailability(payload)
     } catch (error) {
       setFormError(error.message)
@@ -790,12 +744,12 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     }
   }, [form, isAuthenticated, ensureAuthenticated, sessionId])
 
+  // Used for free (no-payment) bookings and deferred payment bookings
   const submitBooking = useCallback(async (slot, options = {}) => {
     const { paymentStatus, paymentReference, deferPayment } = options
     setBookingInFlight(true)
     try {
-      const combinedDateTime = combineDateAndTime(form.preferredDate, form.preferredTime)
-      const preferredDateTime = serializeDateTime(combinedDateTime)
+      const preferredDateTime = serializeDateTime(combineDateAndTime(form.preferredDate, form.preferredTime))
       const payload = {
         userId: sessionId,
         itemType: form.itemType,
@@ -811,7 +765,6 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
         approxWeight: form.approxWeight === '' ? null : Number(form.approxWeight),
         specialNotes: form.specialNotes,
       }
-
       if (paymentStatus) payload.paymentStatus = paymentStatus
       if (paymentReference) payload.paymentReference = paymentReference
       if (deferPayment) payload.deferPayment = true
@@ -821,36 +774,25 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-
       const result = await safeJson(response)
-      if (!response.ok || result?.ok === false) {
-        throw new Error(result?.message || 'Unable to schedule the selected slot.')
-      }
+      if (!response.ok || result?.ok === false) throw new Error(result?.message || 'Unable to schedule the selected slot.')
 
       const requestDoc = result?.request || {}
-
       setConfirmation({
         request: {
-          residentName: form.residentName,
-          ownerName: form.ownerName,
-          address: form.address,
-          district: form.district,
-          email: form.email,
-          phone: form.phone,
-          itemType: form.itemType,
-          quantity: form.quantity,
-          approxWeight: form.approxWeight,
-          specialNotes: form.specialNotes,
-          status: requestDoc.status,
-          paymentStatus: requestDoc.paymentStatus,
+          residentName: form.residentName, ownerName: form.ownerName,
+          address: form.address, district: form.district,
+          email: form.email, phone: form.phone,
+          itemType: form.itemType, quantity: form.quantity,
+          approxWeight: form.approxWeight, specialNotes: form.specialNotes,
+          status: requestDoc.status, paymentStatus: requestDoc.paymentStatus,
           paymentReference: requestDoc.paymentReference,
           paymentDueAt: requestDoc.paymentDueAt,
           paymentRequired: requestDoc.paymentRequired,
           billingId: requestDoc.billingId,
         },
         scheduled: {
-          date: form.preferredDate,
-          time: form.preferredTime,
+          date: form.preferredDate, time: form.preferredTime,
           slotId: slot.slotId,
           slotStart: requestDoc.slot?.start || slot.start,
           slotEnd: requestDoc.slot?.end || slot.end,
@@ -875,30 +817,132 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     }
   }, [availability, form, refreshRequests, sessionId])
 
-  // ✅ UPI payment — replaces Stripe
-  const startCheckout = useCallback(async slot => {
-    setUpiSlot(slot)
-    setUtrNumber('')
-    setUtrError('')
-    setUpiDialogOpen(true)
-  }, [])
+  // ✅ RAZORPAY: opens the Razorpay modal and verifies payment on the backend
+  const startCheckout = useCallback(async (slot) => {
+    setBookingInFlight(true)
+    setFeedback(null)
+    try {
+      const loaded = await loadRazorpayScript()
+      if (!loaded) throw new Error('Failed to load payment gateway. Please try again.')
 
-  const handleUpiConfirm = useCallback(async () => {
-    if (!utrNumber.trim() || utrNumber.trim().length < 6) {
-      setUtrError('Please enter a valid UTR / transaction ID (min 6 characters)')
-      return
+      const preferredDateTime = serializeDateTime(combineDateAndTime(form.preferredDate, form.preferredTime))
+
+      // 1. Create Razorpay order
+      const orderRes = await fetch('/api/schedules/special/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: sessionId,
+          itemType: form.itemType,
+          quantity: Number(form.quantity),
+          preferredDateTime,
+          slotId: slot.slotId,
+          residentName: form.residentName,
+          ownerName: form.ownerName,
+          address: form.address,
+          district: form.district,
+          email: form.email,
+          phone: form.phone,
+          approxWeight: form.approxWeight === '' ? null : Number(form.approxWeight),
+          specialNotes: form.specialNotes,
+        }),
+      })
+      const orderData = await safeJson(orderRes)
+      if (!orderRes.ok || orderData?.ok === false) throw new Error(orderData?.message || 'Could not initiate payment')
+
+      // 2. Open Razorpay modal
+      await new Promise((resolve, reject) => {
+        const options = {
+          key: orderData.keyId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: 'GHMC Smart Waste',
+          description: orderData.description || 'Special collection pickup',
+          order_id: orderData.orderId,
+          prefill: orderData.prefill || {},
+          theme: { color: '#2563eb' },
+          // ✅ Show UPI as the first block, then all other methods below
+          config: {
+            display: {
+              blocks: {
+                upi_block: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+              },
+              sequence: ['block.upi_block'],
+              preferences: { show_default_blocks: true },
+            },
+          },
+          modal: {
+            ondismiss: () => {
+              setBookingInFlight(false)
+              resolve()
+            },
+          },
+          handler: async (response) => {
+            try {
+              // 3. Verify payment on backend → finalises the booking
+              const verifyRes = await fetch('/api/schedules/special/payment/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  userId: sessionId,
+                }),
+              })
+              const verifyData = await safeJson(verifyRes)
+              if (!verifyRes.ok || verifyData?.ok === false) throw new Error(verifyData?.message || 'Payment verification failed')
+
+              const requestDoc = verifyData.request || {}
+              setConfirmation({
+                request: {
+                  residentName: form.residentName, ownerName: form.ownerName,
+                  address: form.address, district: form.district,
+                  email: form.email, phone: form.phone,
+                  itemType: form.itemType, quantity: form.quantity,
+                  approxWeight: form.approxWeight, specialNotes: form.specialNotes,
+                  status: requestDoc.status || 'scheduled',
+                  paymentStatus: requestDoc.paymentStatus || 'success',
+                  paymentRequired: true,
+                },
+                scheduled: {
+                  date: form.preferredDate, time: form.preferredTime,
+                  slotId: slot.slotId,
+                  slotStart: requestDoc.slot?.start || slot.start,
+                  slotEnd: requestDoc.slot?.end || slot.end,
+                },
+                payment: availability?.payment || null,
+              })
+              setFeedback({ type: 'success', message: 'Booking confirmed! Your special collection has been scheduled.' })
+              setAvailability(null)
+              setForm(prev => ({
+                ...prev,
+                preferredDate: initialFormState.preferredDate,
+                preferredTime: initialFormState.preferredTime,
+                approxWeight: initialFormState.approxWeight,
+                quantity: initialFormState.quantity,
+                specialNotes: initialFormState.specialNotes,
+              }))
+              refreshRequests()
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
+          },
+        }
+
+        const rzp = new window.Razorpay(options)
+        rzp.on('payment.failed', (response) => {
+          reject(new Error(response.error?.description || 'Payment failed. Please try again.'))
+        })
+        rzp.open()
+      })
+    } catch (error) {
+      setFeedback({ type: 'error', message: error.message })
+    } finally {
+      setBookingInFlight(false)
     }
-    if (!upiSlot) return
-    setUpiConfirming(true)
-    setUpiDialogOpen(false)
-    await submitBooking(upiSlot, {
-      paymentStatus: 'success',
-      paymentReference: `UPI-${utrNumber.trim().toUpperCase()}`,
-    })
-    setUpiConfirming(false)
-    setUpiSlot(null)
-    setUtrNumber('')
-  }, [utrNumber, upiSlot, submitBooking])
+  }, [form, sessionId, availability, refreshRequests])
 
   const closePaymentChoice = useCallback(() => {
     setPaymentChoiceOpen(false)
@@ -939,19 +983,10 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
   const slotWindowLabel = selectedSlot ? formatSlotRange(selectedSlot) : null
   const slotDueLabel = useMemo(() => {
     if (!selectedSlot?.start) return null
-    try {
-      return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(selectedSlot.start))
-    } catch (error) {
-      return null
-    }
+    try { return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(selectedSlot.start)) }
+    catch { return null }
   }, [selectedSlot])
   const paymentAmountLabel = availability?.payment?.amount != null ? formatCurrency(availability.payment.amount) : null
-
-  // Build UPI payment URL for QR
-  const upiPaymentUrl = useMemo(() => {
-    const amount = availability?.payment?.amount ?? 0
-    return `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(UPI_NAME)}&am=${amount}&cu=INR&tn=${encodeURIComponent('GHMC Special Collection')}`
-  }, [availability?.payment?.amount, UPI_ID, UPI_NAME])
 
   return (
     <div className="glass-panel mx-auto max-w-6xl rounded-4xl border border-slate-200/60 bg-white/90 p-8 shadow-md">
@@ -982,14 +1017,21 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
 
         {feedback?.type === 'success' && confirmation ? (
           <Box sx={{ maxWidth: 1100, mx: 'auto', width: '100%' }}>
-            <ConfirmationPanel details={confirmation} allowedItems={allowedItems} onBack={() => navigate(-1)} onEdit={() => setFeedback(null)} />
+            <ConfirmationPanel details={confirmation} allowedItems={allowedItems} />
           </Box>
         ) : (
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <Box sx={{ maxWidth: 1100, mx: 'auto', width: '100%' }}>
               <Grid container spacing={3} alignItems="stretch">
                 <Grid item xs={12} md={7} sx={{ display: 'flex' }}>
-                  <RequestForm form={form} allowedItems={allowedItems} selectedPolicy={selectedPolicy} onChange={handleFormChange} onSubmit={handleFormSubmit} availabilityLoading={availabilityLoading || configLoading} isAuthenticated={isAuthenticated} onRequireAuth={ensureAuthenticated} errors={formErrors} touched={touched} onBlur={handleFormBlur} onReset={handleResetForm} isFormValid={isFormValid} slotConfig={slotConfig} />
+                  <RequestForm
+                    form={form} allowedItems={allowedItems} selectedPolicy={selectedPolicy}
+                    onChange={handleFormChange} onSubmit={handleFormSubmit}
+                    availabilityLoading={availabilityLoading || configLoading}
+                    isAuthenticated={isAuthenticated} onRequireAuth={ensureAuthenticated}
+                    errors={formErrors} touched={touched} onBlur={handleFormBlur}
+                    onReset={handleResetForm} isFormValid={isFormValid} slotConfig={slotConfig}
+                  />
                 </Grid>
                 <Grid item xs={12} md={5} sx={{ display: 'flex' }}>
                   <PaymentSummary payment={availability?.payment} showBreakdown={form.approxWeight !== '' && Number(form.quantity) > 0} />
@@ -1005,12 +1047,12 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
 
         <ScheduledRequests requests={requests} loading={requestsLoading} error={requestsError} allowedItems={allowedItems} onRefresh={refreshRequests} />
 
-        {/* Pay now / Pay later choice dialog */}
+        {/* ✅ RAZORPAY: Pay now / Pay later choice dialog (no UPI QR dialog needed) */}
         <Dialog open={paymentChoiceOpen} onClose={bookingInFlight ? undefined : closePaymentChoice} maxWidth="sm" fullWidth>
           <DialogTitle>Select how you would like to pay</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ mb: 2 }}>
-              Paying now via UPI will confirm this pickup immediately.
+              Paying now via Razorpay will confirm this pickup immediately. Razorpay supports UPI, Rupay cards, net banking, and all major cards.
               {paymentAmountLabel ? ` The total payable amount is ${paymentAmountLabel}.` : ''}
             </DialogContentText>
             <Stack spacing={1.5}>
@@ -1032,55 +1074,9 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={closePaymentChoice} disabled={bookingInFlight}>Back</Button>
             <Button onClick={handleDeferPayment} disabled={bookingInFlight} variant="outlined">Pay later</Button>
-            <Button onClick={handleProceedWithPayment} disabled={bookingInFlight} variant="contained">Pay now via UPI</Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* ✅ UPI Payment Dialog */}
-        <Dialog open={upiDialogOpen} onClose={upiConfirming ? undefined : () => setUpiDialogOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pt: 3 }}>
-            Pay via UPI
-          </DialogTitle>
-          <DialogContent>
-            <Stack spacing={2.5} alignItems="center">
-              <Typography variant="body2" color="text.secondary" textAlign="center">
-                Scan the QR code using GPay, PhonePe, Paytm or any UPI app
-              </Typography>
-
-              {/* Auto-generated QR code */}
-             <Box sx={{ border: '2px solid', borderColor: 'divider', borderRadius: 2, p: 1 }}>
-  <QRCodeSVG value={upiPaymentUrl} size={200} />
-</Box>
-
-              <Box sx={{ bgcolor: 'grey.50', borderRadius: 2, p: 2, width: '100%', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary">UPI ID</Typography>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
-                  {UPI_ID}
-                </Typography>
-                <Typography variant="h5" fontWeight={700} color="primary.main" sx={{ mt: 1 }}>
-                  {formatCurrency(availability?.payment?.amount ?? 0)}
-                </Typography>
-              </Box>
-
-              <Alert severity="info" sx={{ width: '100%' }}>
-                After paying, enter the UTR / Transaction ID shown in your UPI app to confirm your booking.
-              </Alert>
-
-              <TextField
-                label="UTR / Transaction ID"
-                value={utrNumber}
-                onChange={e => { setUtrNumber(e.target.value); setUtrError('') }}
-                error={Boolean(utrError)}
-                helperText={utrError || 'e.g. 405813XXXXXX (from your UPI app)'}
-                fullWidth
-                inputProps={{ style: { textTransform: 'uppercase', letterSpacing: 1 } }}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button onClick={() => setUpiDialogOpen(false)} disabled={upiConfirming}>Cancel</Button>
-            <Button onClick={handleUpiConfirm} variant="contained" disabled={upiConfirming || !utrNumber.trim()}>
-              {upiConfirming ? 'Confirming…' : 'Confirm Payment'}
+            <Button onClick={handleProceedWithPayment} disabled={bookingInFlight} variant="contained">
+              {bookingInFlight ? <CircularProgress size={18} color="inherit" sx={{ mr: 1 }} /> : null}
+              Pay now via Razorpay
             </Button>
           </DialogActions>
         </Dialog>
