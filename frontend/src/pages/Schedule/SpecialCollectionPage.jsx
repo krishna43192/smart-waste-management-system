@@ -992,10 +992,10 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     <div className="glass-panel mx-auto max-w-6xl rounded-4xl border border-slate-200/60 bg-white/90 p-8 shadow-md">
       <Stack spacing={5}>
         <Box>
-          <Chip icon={<Truck size={16} />} label="Special pickup scheduling" color="primary" variant="outlined" sx={{ fontWeight: 600, borderRadius: '999px' }} />
-          <Typography variant="h4" fontWeight={600} mt={2}>Schedule a bulky or speciality pickup</Typography>
+          <Chip icon={<Truck size={16} />} label="Waste pickup scheduling" color="primary" variant="outlined" sx={{ fontWeight: 600, borderRadius: '999px' }} />
+          <Typography variant="h4" fontWeight={600} mt={2}>Schedule a waste pickup</Typography>
           <Typography variant="body1" color="text.secondary" mt={1.5}>
-            Reserve a dedicated collection slot for furniture, e-waste, or other speciality items. Slots are limited each day to ensure crews have sufficient capacity.
+            Reserve a dedicated doorstep collection slot for wet waste, dry recyclables, e-waste, bulky items, and more. Slots are limited each day to ensure crews have sufficient capacity.
           </Typography>
         </Box>
 
