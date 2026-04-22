@@ -13,50 +13,50 @@ import RouteTimeline from './RouteTimeline.jsx'
 const FALLBACK_CITIES = [
   {
     name: 'Secunderabad',
-    depot: { lat: 17.440, lon: 78.498 },
-    bbox: [[17.410, 78.460], [17.480, 78.540]],
+    depot: { lat: 17.4399, lon: 78.4983 },
+    bbox: [[17.410, 78.470], [17.470, 78.530]],
     areaSqKm: 25.4,
     population: 520000,
     lastCollectionAt: null,
   },
   {
-    name: 'LB Nagar',
-    depot: { lat: 17.347, lon: 78.552 },
-    bbox: [[17.320, 78.520], [17.380, 78.590]],
-    areaSqKm: 18.2,
-    population: 410000,
-    lastCollectionAt: null,
-  },
-  {
     name: 'Kukatpally',
-    depot: { lat: 17.494, lon: 78.395 },
-    bbox: [[17.460, 78.360], [17.530, 78.430]],
-    areaSqKm: 21.7,
-    population: 480000,
+    depot: { lat: 17.4849, lon: 78.4138 },
+    bbox: [[17.455, 78.380], [17.515, 78.450]],
+    areaSqKm: 32.1,
+    population: 680000,
     lastCollectionAt: null,
   },
   {
-    name: 'Uppal',
-    depot: { lat: 17.405, lon: 78.559 },
-    bbox: [[17.375, 78.525], [17.435, 78.595]],
-    areaSqKm: 16.8,
-    population: 360000,
+    name: 'LB Nagar',
+    depot: { lat: 17.3464, lon: 78.5524 },
+    bbox: [[17.315, 78.520], [17.380, 78.585]],
+    areaSqKm: 28.7,
+    population: 610000,
     lastCollectionAt: null,
   },
   {
-    name: 'Miyapur',
-    depot: { lat: 17.496, lon: 78.357 },
-    bbox: [[17.465, 78.325], [17.525, 78.390]],
-    areaSqKm: 14.3,
-    population: 295000,
+    name: 'Charminar',
+    depot: { lat: 17.3616, lon: 78.4747 },
+    bbox: [[17.330, 78.445], [17.395, 78.505]],
+    areaSqKm: 19.3,
+    population: 490000,
     lastCollectionAt: null,
   },
   {
-    name: 'Dilsukhnagar',
-    depot: { lat: 17.369, lon: 78.526 },
-    bbox: [[17.340, 78.495], [17.400, 78.560]],
-    areaSqKm: 12.6,
-    population: 320000,
+    name: 'Serilingampally',
+    depot: { lat: 17.4933, lon: 78.3260 },
+    bbox: [[17.460, 78.290], [17.525, 78.360]],
+    areaSqKm: 41.2,
+    population: 590000,
+    lastCollectionAt: null,
+  },
+  {
+    name: 'Khairatabad',
+    depot: { lat: 17.4126, lon: 78.4571 },
+    bbox: [[17.385, 78.430], [17.445, 78.485]],
+    areaSqKm: 22.8,
+    population: 450000,
     lastCollectionAt: null,
   },
 ]
@@ -220,8 +220,14 @@ export default function ManageCollectionOpsPage() {
         return
       }
       if (!res.ok) throw new Error(`Failed to load plan (${res.status})`)
-      const data = await res.json()
+      const raw = await res.json()
       if (signal?.aborted) return
+      // by-city returns an array of plans — pick the first one
+      const data = Array.isArray(raw) ? raw[0] : raw
+      if (!data) {
+        setPlan(null); setDirections(null); setLastOptimizedAt(null)
+        return
+      }
       const normalized = { ...data, depot: data.depot || selectedCity?.depot || null, summary: data.summary || {} }
       const totalStops = Array.isArray(normalized.stops) ? normalized.stops.length : 0
       const completedCount = Array.isArray(normalized.stops) ? normalized.stops.filter(s => s.visited).length : 0
