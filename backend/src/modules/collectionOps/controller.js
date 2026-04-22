@@ -196,12 +196,41 @@ exports.getPlanByCity = async (req, res) => {
 exports.getOpsSummary = async (_req, res) => {
   try {
     const today = new Date();
-    const [totalBins, collectionsToday, activePlans] = await Promise.all([
+    const dayStart = startOfDay(today);
+    const dayEnd = endOfDay(today);
+
+    const [totalBins, collectionsToday, activePlans, totalZones, activeZonesList] = await Promise.all([
       WasteBin.countDocuments(),
-      CollectionEvent.countDocuments({ ts: { $gte: startOfDay(today), $lte: endOfDay(today) } }),
-      RoutePlan.countDocuments({ date: { $gte: startOfDay(today), $lte: endOfDay(today) } }),
+      CollectionEvent.countDocuments({ ts: { $gte: dayStart, $lte: dayEnd } }),
+      RoutePlan.countDocuments({ date: { $gte: dayStart, $lte: dayEnd } }),
+      City.countDocuments(),
+      RoutePlan.distinct('city', { date: { $gte: dayStart, $lte: dayEnd } }),
     ]);
-    return res.json({ totalBins, collectionsToday, activePlans });
+
+    const activeZones = activeZonesList.length;
+    const engagedTrucks = activePlans;
+    const fleetSize = Math.max(totalZones * 2, 6);
+    const availableTrucks = Math.max(0, fleetSize - engagedTrucks);
+
+    // Determine service level based on collection coverage
+    let serviceLevel = 'normal';
+    if (totalZones > 0 && activeZones < Math.ceil(totalZones * 0.3)) {
+      serviceLevel = 'critical';
+    } else if (totalZones > 0 && activeZones < Math.ceil(totalZones * 0.6)) {
+      serviceLevel = 'warning';
+    }
+
+    return res.json({
+      totalBins,
+      collectionsToday,
+      activePlans,
+      activeZones,
+      totalZones,
+      availableTrucks,
+      fleetSize,
+      engagedTrucks,
+      serviceLevel,
+    });
   } catch (error) {
     console.error('getOpsSummary error', error);
     return respondWithError(res, 500, 'Unable to fetch operations summary');

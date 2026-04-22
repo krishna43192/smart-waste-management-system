@@ -249,24 +249,36 @@ function Home() {
           </div>
         </div>
 
-        <div className="glass-panel rounded-4xl border border-slate-200/60 bg-slate-950/95 p-8 text-slate-100 shadow-xl shadow-slate-900/40">
-          <h2 className="text-sm uppercase tracking-wide text-slate-400">Ops snapshot</h2>
-          <div className="mt-6 grid gap-6">
-            {highlights.map(item => (
-              <div key={item.label} className="flex items-start justify-between rounded-2xl bg-slate-900/60 px-5 py-4">
-                <div className="flex items-start gap-3">
-                  <item.icon className="mt-0.5 h-5 w-5 text-brand-300" />
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-400">{item.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
+        <div className="relative overflow-hidden rounded-4xl shadow-xl shadow-emerald-900/30">
+          {/* Greenery background image */}
+          <img
+            src="/hero-greenery.png"
+            alt="Green smart city — Hyderabad sustainable waste management"
+            className="h-full w-full object-cover absolute inset-0"
+          />
+          {/* Gradient overlay for readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/60 to-emerald-950/30" />
+
+          {/* Content on top of image */}
+          <div className="relative p-8 text-slate-100 flex flex-col justify-end min-h-[420px]">
+            <h2 className="text-sm uppercase tracking-wide text-emerald-300 font-semibold">Ops snapshot</h2>
+            <div className="mt-5 grid gap-4">
+              {highlights.map(item => (
+                <div key={item.label} className="flex items-start justify-between rounded-2xl bg-slate-900/50 backdrop-blur-sm px-5 py-4 border border-white/10">
+                  <div className="flex items-start gap-3">
+                    <item.icon className="mt-0.5 h-5 w-5 text-emerald-400" />
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-300">{item.label}</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{item.value}</p>
+                    </div>
                   </div>
+                  <p className="max-w-[12rem] text-right text-xs text-slate-300">{item.helper}</p>
                 </div>
-                <p className="max-w-[12rem] text-right text-xs text-slate-400">{item.helper}</p>
-              </div>
-            ))}
+              ))}
+            </div>
+            {/* ✅ FIXED Issue 1: Changed Colombo Time to IST Hyderabad */}
+            <p className="mt-5 text-xs text-emerald-300/70">Service window: 05:00 – 20:00 IST (Hyderabad)</p>
           </div>
-          {/* ✅ FIXED Issue 1: Changed Colombo Time to IST Hyderabad */}
-          <p className="mt-6 text-xs text-slate-400">Service window: 05:00 – 20:00 IST (Hyderabad)</p>
         </div>
       </section>
 

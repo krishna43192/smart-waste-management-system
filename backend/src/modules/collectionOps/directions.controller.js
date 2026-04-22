@@ -12,6 +12,11 @@ const getFetch = async () => {
 
 const respondWithError = (res, status, message) => res.status(status).json({ error: message });
 
+// Validates that a coordinate pair contains finite numbers suitable for OSRM.
+const isValidCoord = ([lat, lon]) =>
+  typeof lat === 'number' && typeof lon === 'number'
+  && Number.isFinite(lat) && Number.isFinite(lon);
+
 const toOSRMCoords = coords => coords.map(([lat, lon]) => `${lon},${lat}`).join(';');
 
 const paramsSchema = z.object({ truckId: z.string().min(1) });
@@ -30,7 +35,7 @@ exports.getPlanDirections = async (req, res) => {
       return res.json({ line: null, distanceKm: 0, durationMin: 0 });
     }
 
-    const depot = plan.depot || { lat: 6.927, lon: 79.861 };
+    const depot = plan.depot || { lat: 17.385, lon: 78.4867 }; // GHMC Central Depot, Khairatabad
     const coordinates = [
       [depot.lat, depot.lon],
       ...plan.stops
