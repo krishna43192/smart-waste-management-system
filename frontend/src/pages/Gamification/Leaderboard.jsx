@@ -1,189 +1,119 @@
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Alert, Box, Chip, CircularProgress, Grid,
-  Stack, Tab, Tabs, Typography,
-} from '@mui/material'
-import { Trophy, Users, Truck } from 'lucide-react'
+import { Alert, CircularProgress } from '@mui/material'
+import { Trophy, Star, RefreshCw, Medal } from 'lucide-react'
 import PropTypes from 'prop-types'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Rank helpers ─────────────────────────────────────────────────────────────
 
-const ACCENT = '#10b981'
+const MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
-const RANK_STYLES = {
-  1: { bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: 'rgba(245,158,11,0.4)', medal: '🥇', color: '#92400e' },
-  2: { bg: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)', border: 'rgba(100,116,139,0.3)', medal: '🥈', color: '#475569' },
-  3: { bg: 'linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%)', border: 'rgba(234,88,12,0.3)', medal: '🥉', color: '#9a3412' },
+const RANK_RING = {
+  1: 'ring-4 ring-amber-400/60 shadow-amber-200',
+  2: 'ring-4 ring-slate-300/70 shadow-slate-100',
+  3: 'ring-4 ring-orange-300/60 shadow-orange-100',
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+const RANK_AVATAR_BG = {
+  1: 'bg-amber-500',
+  2: 'bg-slate-500',
+  3: 'bg-orange-500',
+}
 
-function TopThreeCard({ user, rank }) {
-  const style = RANK_STYLES[rank]
-  const sizes = { 1: { card: 180, avatar: 64, font: 'h5' }, 2: { card: 160, avatar: 52, font: 'h6' }, 3: { card: 150, avatar: 48, font: 'h6' } }
-  const sz = sizes[rank]
+// ─── Components ───────────────────────────────────────────────────────────────
 
+function Avatar({ name, email, rank, size = 56 }) {
+  const initial = (name || email || '?')[0].toUpperCase()
+  const bg = RANK_AVATAR_BG[rank] || 'bg-emerald-600'
+  const ring = RANK_RING[rank] || ''
   return (
-    <Box sx={{
-      background: style.bg,
-      border: '1px solid', borderColor: style.border,
-      borderRadius: 5, p: 3,
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      minHeight: sz.card, justifyContent: 'center',
-      boxShadow: rank === 1 ? '0 8px 24px rgba(245,158,11,0.18)' : '0 2px 8px rgba(0,0,0,0.06)',
-      transition: 'transform 0.2s',
-      '&:hover': { transform: 'translateY(-3px)' },
-    }}>
-      {/* Avatar circle with initials */}
-      <Box sx={{
-        width: sz.avatar, height: sz.avatar, borderRadius: '50%',
-        bgcolor: style.color, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', mb: 1.5,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-      }}>
-        <Typography variant={sz.font} fontWeight={800} color="white">
-          {(user.name || user.email || '?')[0].toUpperCase()}
-        </Typography>
-      </Box>
-
-      {/* Medal */}
-      <Typography sx={{ fontSize: 24, lineHeight: 1, mb: 0.5 }}>{style.medal}</Typography>
-
-      {/* Name */}
-      <Typography variant="body2" fontWeight={700} color="text.primary" textAlign="center"
-        sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {user.name || user.email}
-      </Typography>
-
-      {/* Points */}
-      <Chip
-        label={`${user.totalPoints?.toLocaleString()} pts`}
-        size="small"
-        sx={{
-          mt: 1, fontWeight: 800, borderRadius: '999px',
-          bgcolor: 'rgba(255,255,255,0.7)', color: style.color,
-          border: `1px solid ${style.border}`,
-        }}
-      />
-    </Box>
+    <div
+      className={`flex items-center justify-center rounded-full text-white font-bold shadow-lg ${bg} ${ring}`}
+      style={{ width: size, height: size, fontSize: size * 0.38, flexShrink: 0 }}
+    >
+      {initial}
+    </div>
   )
 }
 
-function LeaderboardRow({ user, currentUserId }) {
+function PodiumBlock({ user }) {
+  const { rank } = user
+  const isFirst = rank === 1
+  return (
+    <div
+      className={`flex flex-col items-center gap-3 rounded-2xl border p-5 transition-transform hover:-translate-y-1 ${
+        isFirst
+          ? 'border-amber-300/50 bg-gradient-to-b from-amber-50 to-white shadow-lg shadow-amber-100'
+          : rank === 2
+          ? 'border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-md'
+          : 'border-orange-200/60 bg-gradient-to-b from-orange-50 to-white shadow-md'
+      }`}
+      style={{ minWidth: 130 }}
+    >
+      <Avatar name={user.name} email={user.email} rank={rank} size={isFirst ? 68 : 54} />
+      <span className="text-2xl leading-none">{MEDALS[rank]}</span>
+      <div className="text-center">
+        <p className="max-w-[120px] truncate text-sm font-bold text-slate-800">{user.name || 'Anonymous'}</p>
+        <p className="mt-0.5 text-xs text-slate-500 truncate max-w-[120px]">{user.email}</p>
+      </div>
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+        <Star className="h-3 w-3" />
+        {user.totalPoints?.toLocaleString()} pts
+      </span>
+    </div>
+  )
+}
+
+function RankRow({ user, currentUserId }) {
   const isMe = user.userId?.toString() === currentUserId?.toString()
   const { rank } = user
-
   return (
-    <Stack
-      direction="row" alignItems="center" spacing={2}
-      sx={{
-        px: 3, py: 2, borderRadius: 3,
-        bgcolor: isMe ? 'rgba(16,185,129,0.06)' : 'rgba(15,23,42,0.02)',
-        border: '1px solid',
-        borderColor: isMe ? 'rgba(16,185,129,0.3)' : 'rgba(15,23,42,0.06)',
-        transition: 'background 0.15s',
-      }}
+    <div
+      className={`flex items-center gap-4 rounded-2xl border px-4 py-3 transition-all hover:shadow-md ${
+        isMe
+          ? 'border-emerald-300/60 bg-emerald-50/80'
+          : 'border-slate-100 bg-white hover:border-slate-200'
+      }`}
     >
-      {/* Rank number */}
-      <Box sx={{ width: 32, textAlign: 'center' }}>
+      {/* Rank */}
+      <div className="w-8 shrink-0 text-center">
         {rank <= 3
-          ? <Typography sx={{ fontSize: 20 }}>{RANK_STYLES[rank].medal}</Typography>
-          : <Typography variant="body2" fontWeight={700} color="text.secondary">#{rank}</Typography>
-        }
-      </Box>
+          ? <span className="text-xl">{MEDALS[rank]}</span>
+          : <span className="text-sm font-bold text-slate-400">#{rank}</span>}
+      </div>
 
       {/* Avatar */}
-      <Box sx={{
-        width: 38, height: 38, borderRadius: '50%',
-        bgcolor: isMe ? ACCENT : 'rgba(15,23,42,0.12)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <Typography variant="body2" fontWeight={800} color={isMe ? 'white' : 'text.secondary'}>
-          {(user.name || user.email || '?')[0].toUpperCase()}
-        </Typography>
-      </Box>
+      <Avatar name={user.name} email={user.email} rank={rank} size={40} />
 
-      {/* Name & email */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography variant="body2" fontWeight={700}
-            sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user.name || 'Anonymous'}
-          </Typography>
+      {/* Name */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-bold text-slate-800">{user.name || 'Anonymous'}</p>
           {isMe && (
-            <Chip label="You" size="small"
-              sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: ACCENT, color: 'white', borderRadius: '999px' }} />
+            <span className="shrink-0 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
+              You
+            </span>
           )}
-        </Stack>
-        <Typography variant="caption" color="text.secondary"
-          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-          {user.email}
-        </Typography>
-      </Box>
+        </div>
+        <p className="truncate text-xs text-slate-400">{user.email}</p>
+      </div>
 
       {/* Points */}
-      <Chip
-        label={`${user.totalPoints?.toLocaleString()} pts`}
-        size="small"
-        sx={{
-          fontWeight: 700, borderRadius: '999px', flexShrink: 0,
-          bgcolor: isMe ? 'rgba(16,185,129,0.12)' : 'rgba(15,23,42,0.06)',
-          color: isMe ? ACCENT : 'text.secondary',
-        }}
-      />
-    </Stack>
+      <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${
+        isMe ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+      }`}>
+        <Star className="h-3 w-3" />
+        {user.totalPoints?.toLocaleString()} pts
+      </span>
+    </div>
   )
 }
 
-function LeaderboardList({ users, currentUserId, emptyMsg }) {
-  if (!users?.length) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography color="text.secondary">{emptyMsg}</Typography>
-      </Box>
-    )
-  }
-
-  const top3    = users.slice(0, 3)
-  const theRest = users.slice(3)
-
-  // Arrange top 3 as: 2nd | 1st | 3rd (podium style)
-  const podium = top3.length === 3
-    ? [top3[1], top3[0], top3[2]]
-    : top3
-
-  return (
-    <Stack spacing={3}>
-      {/* Podium for top 3 */}
-      {top3.length > 0 && (
-        <Grid container spacing={2} alignItems="flex-end" justifyContent="center">
-          {podium.map(user => (
-            <Grid item xs={4} key={user.userId}>
-              <TopThreeCard user={user} rank={user.rank} />
-            </Grid>
-          ))}
-        </Grid>
-      )}
-
-      {/* Rest of the list */}
-      {theRest.length > 0 && (
-        <Stack spacing={1}>
-          {theRest.map(user => (
-            <LeaderboardRow key={user.userId} user={user} currentUserId={currentUserId} />
-          ))}
-        </Stack>
-      )}
-    </Stack>
-  )
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Leaderboard({ session }) {
-  const [data, setData] = useState(null)
+  const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [tab, setTab] = useState(0)   // 0 = residents, 1 = collectors
+  const [error, setError]     = useState(null)
 
   const userId = session?.id ?? session?._id ?? null
 
@@ -191,7 +121,7 @@ export default function Leaderboard({ session }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/gamification/leaderboard?limit=10')
+      const res  = await fetch('/api/gamification/leaderboard?limit=10')
       const json = await res.json()
       if (!json.ok) throw new Error(json.message)
       setData(json.data)
@@ -204,113 +134,162 @@ export default function Leaderboard({ session }) {
 
   useEffect(() => { fetchLeaderboard() }, [fetchLeaderboard])
 
-  const residents  = data?.residents  ?? []
-  const collectors = data?.collectors ?? []
-  const current    = tab === 0 ? residents : collectors
+  const residents = data?.residents ?? []
+  const podium    = residents.slice(0, 3)
+  const rest      = residents.slice(3)
+
+  // Re-order podium: 2nd | 1st | 3rd (only when we have 3)
+  const orderedPodium = podium.length === 3
+    ? [podium[1], podium[0], podium[2]]
+    : podium
 
   return (
-    <div className="glass-panel mx-auto mt-4 max-w-3xl rounded-4xl border border-slate-200/70 bg-white/90 p-8 shadow-xl">
-      <Stack spacing={5}>
+    <div className="min-h-screen" style={{ background: '#f0f4f8' }}>
 
-        {/* Header */}
-        <Box>
-          <Chip
-            icon={<Trophy size={14} />}
-            label="Community rankings"
-            color="primary"
-            variant="outlined"
-            sx={{ fontWeight: 600, borderRadius: '999px', mb: 2 }}
-          />
-          <Typography variant="h4" fontWeight={800} color="text.primary">
-            Leaderboard
-          </Typography>
-          <Typography variant="body1" color="text.secondary" mt={0.5}>
-            See who is leading the way in responsible waste management
-          </Typography>
-        </Box>
+      {/* ── Hero header ─────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #065f46 100%)',
+          paddingBottom: 80,
+        }}
+        className="px-6 pt-12"
+      >
+        {/* Decorative blobs */}
+        <div style={{ position: 'relative', maxWidth: 720, margin: '0 auto' }}>
+          <div style={{ position: 'absolute', top: -30, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -10, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
 
-        {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-200 backdrop-blur-sm mb-5">
+            <Trophy className="h-3.5 w-3.5" />
+            Community rankings
+          </div>
 
-        {/* Tabs */}
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          sx={{
-            borderBottom: '1px solid rgba(15,23,42,0.08)',
-            '& .MuiTab-root': { textTransform: 'none', fontWeight: 600 },
-            '& .Mui-selected': { color: ACCENT },
-            '& .MuiTabs-indicator': { bgcolor: ACCENT },
-          }}
-        >
-          <Tab
-            icon={<Users size={16} />}
-            iconPosition="start"
-            label={`Residents (${residents.length})`}
-          />
-          <Tab
-            icon={<Truck size={16} />}
-            iconPosition="start"
-            label={`Collectors (${collectors.length})`}
-          />
-        </Tabs>
+          {/* Title */}
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
+            Resident Leaderboard
+          </h1>
+          <p className="text-emerald-100/80 text-base mb-6 max-w-md">
+            Every pickup scheduled and bill paid on time earns you points.
+            Climb the board and show Hyderabad who cares!
+          </p>
 
-        {/* Content */}
-        {loading ? (
-          <Stack alignItems="center" py={6} spacing={2}>
-            <CircularProgress sx={{ color: ACCENT }} />
-            <Typography color="text.secondary">Loading leaderboard…</Typography>
-          </Stack>
-        ) : (
-          <LeaderboardList
-            users={current}
-            currentUserId={userId}
-            emptyMsg={
-              tab === 0
-                ? 'No residents have earned points yet. Be the first!'
-                : 'No collectors have earned points yet.'
-            }
-          />
-        )}
+          {/* How to earn */}
+          <div className="flex flex-wrap gap-3">
+            {[
+              { icon: <Medal className="h-3.5 w-3.5" />, text: '+50 pts — Schedule a pickup' },
+              { icon: <Star className="h-3.5 w-3.5" />, text: '+30 pts — Pay bill on time' },
+            ].map(item => (
+              <div
+                key={item.text}
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-medium text-emerald-100 backdrop-blur-sm"
+              >
+                <span className="text-emerald-300">{item.icon}</span>
+                {item.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-        {/* Footer note */}
-        <Box sx={{
-          p: 2.5, borderRadius: 3,
-          bgcolor: 'rgba(15,23,42,0.02)', border: '1px solid rgba(15,23,42,0.06)',
-          textAlign: 'center',
-        }}>
-          <Typography variant="caption" color="text.secondary">
-            Rankings update in real time as points are earned.
-            Pay bills early and schedule pickups to climb the leaderboard!
-          </Typography>
-        </Box>
+      {/* ── Main card (overlaps hero by ~40px) ─────────── */}
+      <div className="px-6" style={{ maxWidth: 720, margin: '-44px auto 3rem' }}>
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
 
-      </Stack>
+          {/* Card header */}
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
+                <Trophy className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-slate-800">Top Residents</p>
+                <p className="text-xs text-slate-400">Ranked by total points earned</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!loading && (
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-100">
+                  {residents.length} ranked
+                </span>
+              )}
+              <button
+                onClick={fetchLeaderboard}
+                disabled={loading}
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+                title="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Card body */}
+          <div className="p-6">
+            {error && (
+              <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 3, borderRadius: 2 }}>
+                {error}
+              </Alert>
+            )}
+
+            {loading ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-slate-400">
+                <CircularProgress size={36} sx={{ color: '#10b981' }} />
+                <p className="text-sm">Loading rankings…</p>
+              </div>
+            ) : residents.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <Trophy className="h-12 w-12 text-slate-200" />
+                <p className="font-semibold text-slate-600">No residents ranked yet</p>
+                <p className="text-sm text-slate-400">Be the first! Schedule a pickup to start earning points.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Podium */}
+                {podium.length > 0 && (
+                  <div className={`flex gap-4 ${podium.length === 3 ? 'items-end' : 'items-start'} justify-center`}>
+                    {orderedPodium.map(user => (
+                      <PodiumBlock key={user.userId} user={user} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Divider */}
+                {rest.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-100" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">More rankings</span>
+                    <div className="h-px flex-1 bg-slate-100" />
+                  </div>
+                )}
+
+                {/* Ranked rows */}
+                {rest.length > 0 && (
+                  <div className="space-y-2">
+                    {rest.map(user => (
+                      <RankRow key={user.userId} user={user} currentUserId={userId} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Card footer */}
+          <div className="border-t border-slate-100 px-6 py-4 text-center text-xs text-slate-400 bg-slate-50/50 rounded-b-3xl">
+            Rankings update in real time · Schedule pickups and pay bills early to climb the board
+          </div>
+        </div>
+      </div>
+
     </div>
   )
 }
 
 // ─── PropTypes ────────────────────────────────────────────────────────────────
 
-TopThreeCard.propTypes = {
-  user: PropTypes.object.isRequired,
-  rank: PropTypes.number.isRequired,
-}
-
-LeaderboardRow.propTypes = {
-  user: PropTypes.object.isRequired,
-  currentUserId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-}
-
-LeaderboardList.propTypes = {
-  users: PropTypes.array.isRequired,
-  currentUserId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  emptyMsg: PropTypes.string,
-}
-
-Leaderboard.propTypes = {
-  session: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    _id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  }),
-}
+Avatar.propTypes       = { name: PropTypes.string, email: PropTypes.string, rank: PropTypes.number, size: PropTypes.number }
+PodiumBlock.propTypes  = { user: PropTypes.object.isRequired }
+RankRow.propTypes      = { user: PropTypes.object.isRequired, currentUserId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]) }
+Leaderboard.propTypes  = { session: PropTypes.shape({ id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), _id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]) }) }
 Leaderboard.defaultProps = { session: null }
