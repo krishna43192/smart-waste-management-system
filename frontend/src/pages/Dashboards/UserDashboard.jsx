@@ -473,18 +473,18 @@ function BillingSection({ session, requests, itemLabelMap, loading, error, onRef
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
         <Stack spacing={0.5}>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Wallet className="h-5 w-5 text-brand-600" />
-            <Typography variant="h6" fontWeight={600}>
+            <Wallet className="h-5 w-5 text-emerald-300" />
+            <Typography variant="h6" fontWeight={600} color="white">
               Billing & payments
             </Typography>
           </Stack>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: 'rgba(209, 250, 229, 0.8)' }}>
             Track municipal invoices and payments tied to your special collection requests.
           </Typography>
         </Stack>
         <Tooltip title="Refresh scheduling data" placement="left">
           <span>
-            <IconButton onClick={onRefresh} size="small" disabled={loading}>
+            <IconButton onClick={onRefresh} size="small" disabled={loading} sx={{ color: 'white' }}>
               <RefreshCcw className="h-4 w-4" />
             </IconButton>
           </span>
@@ -595,19 +595,19 @@ function UpcomingSection({ upcoming, itemLabelMap, loading, error, onRefresh }) 
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
         <Stack spacing={0.5}>
           <Stack direction="row" spacing={2} alignItems="center">
-            <CalendarClock className="h-5 w-5 text-brand-600" />
-            <Typography variant="h6" fontWeight={600}>
+            <CalendarClock className="h-5 w-5 text-emerald-300" />
+            <Typography variant="h6" fontWeight={600} color="white">
               Upcoming pickups
             </Typography>
           </Stack>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: 'rgba(209, 250, 229, 0.8)' }}>
             Confirmed special collections that are scheduled for future slots.
           </Typography>
         </Stack>
         <Stack direction="row" spacing={1} alignItems="center">
           <Tooltip title="Refresh scheduling data" placement="left">
             <span>
-              <IconButton onClick={onRefresh} size="small" disabled={loading}>
+              <IconButton onClick={onRefresh} size="small" disabled={loading} sx={{ color: 'white' }}>
                 <RefreshCcw className="h-4 w-4" />
               </IconButton>
             </span>
@@ -676,23 +676,25 @@ function HistorySection({ history, itemLabelMap, loading, onRefresh }) {
   return (
     <section className="space-y-5">
       <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <History className="h-5 w-5 text-brand-600" />
-          <Typography variant="h6" fontWeight={600}>
-            Pickup history
+        <Stack spacing={0.5}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <History className="h-5 w-5 text-emerald-300" />
+            <Typography variant="h6" fontWeight={600} color="white">
+              Pickup history
+            </Typography>
+          </Stack>
+          <Typography variant="body2" sx={{ color: 'rgba(209, 250, 229, 0.8)' }}>
+            Completed, cancelled, and payment-pending requests from your account.
           </Typography>
         </Stack>
         <Tooltip title="Refresh scheduling data" placement="left">
           <span>
-            <IconButton onClick={onRefresh} size="small" disabled={loading}>
+            <IconButton onClick={onRefresh} size="small" disabled={loading} sx={{ color: 'white' }}>
               <RefreshCcw className="h-4 w-4" />
             </IconButton>
           </span>
         </Tooltip>
       </Stack>
-      <Typography variant="body2" color="text.secondary">
-        Completed, cancelled, and payment-pending requests from your account.
-      </Typography>
 
       <Card className="glass-panel rounded-4xl border border-slate-200/70 bg-white/95 shadow-md">
         <CardContent>
@@ -816,20 +818,41 @@ export default function UserDashboard({ session = null }) {
   }, [activeSection])
 
   return (
-    <Box
-      component="main"
-      sx={{
-        bgcolor: 'rgba(248, 250, 252, 0.85)',
-        minHeight: '100vh',
-        py: { xs: 6, md: 8 },
-      }}
-    >
+    <div className="min-h-screen -mt-6" style={{ background: '#f0f4f8' }}>
+      {/* ── Hero header ─────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #065f46 100%)',
+          paddingBottom: 100,
+        }}
+        className="px-6 pt-12"
+      >
+        <div style={{ position: 'relative', maxWidth: 1240, margin: '0 auto' }}>
+          <div style={{ position: 'absolute', top: -30, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -10, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-200 backdrop-blur-sm mb-5">
+            <Wallet className="h-3.5 w-3.5" />
+            User dashboard
+          </div>
+
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
+            {session?.name ? `Welcome back, ${session.name}` : 'Welcome to your dashboard'}
+          </h1>
+          <p className="text-emerald-100/80 text-base mb-6 max-w-2xl">
+            Use the navigation to move between billing, upcoming pickups, and your scheduling history.
+          </p>
+        </div>
+      </div>
+
       <Box
         sx={{
           mx: 'auto',
           width: '100%',
           maxWidth: 1240,
           px: { xs: 2, sm: 3, md: 4 },
+          mt: '-64px',
+          pb: 8
         }}
       >
         <Stack
@@ -873,20 +896,6 @@ export default function UserDashboard({ session = null }) {
             )}
 
             <Stack spacing={4}>
-              <Box className="glass-panel rounded-4xl border border-slate-200/70 bg-white/90 p-8 shadow-md">
-                <Stack spacing={1.5}>
-                  <Typography variant="overline" color="text.secondary" fontWeight={600}>
-                    User dashboard
-                  </Typography>
-                  <Typography variant="h4" fontWeight={600}>
-                    {session?.name ? `Welcome back, ${session.name}` : 'Welcome to your dashboard'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Use the navigation to move between billing, upcoming pickups, and your scheduling history.
-                  </Typography>
-                </Stack>
-              </Box>
-
               <ActiveSectionComponent {...sectionProps[activeSection]} />
             </Stack>
           </Box>
@@ -899,7 +908,7 @@ export default function UserDashboard({ session = null }) {
         activeSection={activeSection}
         onNavigate={handleNavigate}
       />
-    </Box>
+    </div>
   )
 }
 

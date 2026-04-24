@@ -989,17 +989,37 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
   const paymentAmountLabel = availability?.payment?.amount != null ? formatCurrency(availability.payment.amount) : null
 
   return (
-    <div className="glass-panel mx-auto max-w-6xl rounded-4xl border border-slate-200/60 bg-white/90 p-8 shadow-md">
-      <Stack spacing={5}>
-        <Box>
-          <Chip icon={<Truck size={16} />} label="Waste pickup scheduling" color="primary" variant="outlined" sx={{ fontWeight: 600, borderRadius: '999px' }} />
-          <Typography variant="h4" fontWeight={600} mt={2}>Schedule a waste pickup</Typography>
-          <Typography variant="body1" color="text.secondary" mt={1.5}>
-            Reserve a dedicated doorstep collection slot for wet waste, dry recyclables, e-waste, bulky items, and more. Slots are limited each day to ensure crews have sufficient capacity.
-          </Typography>
-        </Box>
+    <div className="min-h-screen -mt-6" style={{ background: '#f0f4f8' }}>
+      {/* ── Hero header ─────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #065f46 100%)',
+          paddingBottom: 80,
+        }}
+        className="px-6 pt-12"
+      >
+        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ position: 'absolute', top: -30, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -10, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
 
-        <Card className="rounded-3xl border border-slate-200/70 shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-200 backdrop-blur-sm mb-5">
+            <Truck className="h-3.5 w-3.5" />
+            Waste pickup scheduling
+          </div>
+
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
+            Schedule a waste pickup
+          </h1>
+          <p className="text-emerald-100/80 text-base mb-6 max-w-2xl">
+            Reserve a dedicated doorstep collection slot for wet waste, dry recyclables, e-waste, bulky items, and more. Slots are limited each day to ensure crews have sufficient capacity.
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6" style={{ maxWidth: 1100, margin: '-44px auto 3rem' }}>
+        <div className="rounded-4xl border border-slate-200 bg-white/95 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-sm">
+          <Stack spacing={5}>
+            <Card className="rounded-3xl border border-slate-200/70 shadow-sm">
           <CardContent>
             <Box sx={{ maxWidth: 1100, mx: 'auto' }}>
               <Stepper activeStep={activeStep} alternativeLabel>
@@ -1081,7 +1101,9 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
           </DialogActions>
         </Dialog>
 
-      </Stack>
+          </Stack>
+        </div>
+      </div>
     </div>
   )
 }
