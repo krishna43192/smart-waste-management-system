@@ -429,24 +429,36 @@ export default function ReportsPage({ session }) {
   }, [report])
 
   return (
-    <div className="glass-panel mx-auto mt-4 max-w-6xl rounded-4xl border border-slate-200/70 bg-white/90 p-8 shadow-xl">
-      <Stack spacing={5}>
-        {/* Page header */}
-        <Box>
-          <Chip
-            icon={<BarChart3 size={16} />}
-            label="Reports & analytics"
-            color="primary"
-            variant="outlined"
-            sx={{ fontWeight: 600, borderRadius: '999px' }}
-          />
-          <Typography variant="h4" fontWeight={600} mt={2} color="text.primary">
+    <div className="min-h-screen -mt-6" style={{ background: '#f0f4f8' }}>
+      {/* ── Hero header ─────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #065f46 100%)',
+          paddingBottom: 80,
+        }}
+        className="px-6 pt-12"
+      >
+        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ position: 'absolute', top: -30, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -10, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-200 backdrop-blur-sm mb-5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Reports & analytics
+          </div>
+
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
             Generate waste insights by region, customer, and billing model
-          </Typography>
-          <Typography variant="body1" color="text.secondary" mt={1.5}>
+          </h1>
+          <p className="text-emerald-100/80 text-base mb-6 max-w-2xl">
             Choose your filters to uncover how waste generation is trending across the network.
-          </Typography>
-        </Box>
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6" style={{ maxWidth: 1100, margin: '-44px auto 3rem' }}>
+        <div className="rounded-4xl border border-slate-200 bg-white/95 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-sm">
+          <Stack spacing={5}>
 
         {/* Error alert */}
         {error && (
@@ -593,7 +605,9 @@ export default function ReportsPage({ session }) {
             )}
           </Stack>
         )}
-      </Stack>
+          </Stack>
+        </div>
+      </div>
     </div>
   )
 }

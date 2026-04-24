@@ -526,12 +526,38 @@ export default function ManageCollectionOpsPage() {
   const slConfig = serviceLevelConfig[summaryMetrics.serviceLevel] || serviceLevelConfig.normal
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6">
-      <section className="glass-panel rounded-4xl p-8 shadow-xl shadow-brand-500/20">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="w-full">
-            <h2 className="text-3xl font-semibold text-slate-900">Manage Collection Operations</h2>
-            <p className="mt-2 max-w-xl text-sm text-slate-600">Generate and manage optimized routes for council zones</p>
+    <div className="min-h-screen -mt-6" style={{ background: '#f0f4f8' }}>
+      {/* ── Hero header ─────────────────────────────────── */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #064e3b 0%, #047857 60%, #065f46 100%)',
+          paddingBottom: 80,
+        }}
+        className="px-6 pt-12"
+      >
+        <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ position: 'absolute', top: -30, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', bottom: -10, left: -50, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-white/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-200 backdrop-blur-sm mb-5">
+            <MapPinned className="h-3.5 w-3.5" />
+            Operations Control
+          </div>
+
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
+            Manage Collection Operations
+          </h1>
+          <p className="text-emerald-100/80 text-base mb-6 max-w-2xl">
+            Generate and manage optimized routes for council zones
+          </p>
+        </div>
+      </div>
+
+      <div className="px-6" style={{ maxWidth: 1100, margin: '-44px auto 3rem' }}>
+        <div className="mx-auto flex flex-col gap-10">
+          <section className="glass-panel rounded-4xl bg-white/95 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-sm">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="w-full lg:flex-1">
 
             {/* ✅ FIX 3: Loading skeletons while summary fetches */}
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -554,7 +580,7 @@ export default function ManageCollectionOpsPage() {
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-shrink-0">
             {/* ✅ FIX 2: Export button with tooltip when disabled */}
             <Button
               onClick={handleExportReport}
@@ -562,7 +588,7 @@ export default function ManageCollectionOpsPage() {
               startIcon={<FileDown className="h-4 w-4" />}
               disabled={!plan}
               title={!plan ? 'Generate a route first to export a report' : 'Export report'}
-              sx={{ borderRadius: '999px', textTransform: 'none', fontWeight: 600, paddingInline: '1.35rem' }}
+              sx={{ borderRadius: '999px', textTransform: 'none', fontWeight: 600, px: 3, whiteSpace: 'nowrap' }}
             >
               Export report
             </Button>
@@ -573,7 +599,7 @@ export default function ManageCollectionOpsPage() {
               label={slConfig.label}
               color={slConfig.color}
               variant="outlined"
-              sx={{ borderRadius: '999px', fontWeight: 600, textTransform: 'none' }}
+              sx={{ borderRadius: '999px', fontWeight: 600, textTransform: 'none', whiteSpace: 'nowrap' }}
             />
           </div>
         </div>
@@ -855,6 +881,8 @@ export default function ManageCollectionOpsPage() {
           </CardContent>
         </Card>
       </section>
+        </div>
+      </div>
     </div>
   )
 }

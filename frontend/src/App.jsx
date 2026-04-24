@@ -242,7 +242,7 @@ function Home() {
   return (
     <div className="flex flex-col gap-0">
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="relative min-h-[92vh] flex items-center overflow-hidden">
+      <section className="relative min-h-[92vh] flex items-center overflow-hidden -mt-6">
         {/* Background image */}
         <img
           src="/hero-greenery.png"
@@ -258,7 +258,7 @@ function Home() {
           {/* Pill badge */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-300 backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5" />
-            Smart Waste Hyderabad · Pilot Programme
+            Smart Waste Hyderabad
           </div>
 
           {/* Headline */}

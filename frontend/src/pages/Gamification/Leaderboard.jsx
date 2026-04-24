@@ -144,7 +144,7 @@ export default function Leaderboard({ session }) {
     : podium
 
   return (
-    <div className="min-h-screen" style={{ background: '#f0f4f8' }}>
+    <div className="min-h-screen -mt-6" style={{ background: '#f0f4f8' }}>
 
       {/* ── Hero header ─────────────────────────────────── */}
       <div
