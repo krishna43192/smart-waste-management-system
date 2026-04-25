@@ -112,7 +112,7 @@ function Nav({ session, onSignOut }) {
       ]
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-800/60 bg-slate-950/90 backdrop-blur">
+    <header className="relative z-20 border-b border-slate-800/60 bg-slate-950/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-6 py-4 text-slate-100">
         <div className="flex flex-1 min-w-[16rem] items-center gap-3">
           <Link to="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
