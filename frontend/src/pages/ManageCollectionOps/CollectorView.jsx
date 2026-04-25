@@ -73,7 +73,15 @@ export default function CollectorView() {
         setBanner({ tone: 'error', message: 'Could not mark as collected. Check connectivity and retry.' })
         return
       }
-      setStops(prev => prev.map(s => s.binId === binId ? { ...s, visited: true } : s))
+      // DYNAMIC RE-ROUTING: Fetch the updated, re-ordered route from the server
+      const updatedRouteRes = await fetch(ROUTE_ENDPOINT)
+      if (updatedRouteRes.ok) {
+        const payload = await updatedRouteRes.json()
+        setStops(payload?.stops || [])
+      } else {
+        // Fallback optimistic update if fetch fails
+        setStops(prev => prev.map(s => s.binId === binId ? { ...s, visited: true } : s))
+      }
       setBanner({ tone: 'success', message: `${binId} recorded as collected. +10 points earned!` })
     } catch (error) {
       console.error('markCollected error', error)

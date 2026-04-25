@@ -113,9 +113,28 @@ exports.optimizeRoute = async (req, res) => {
     });
     const persisted = [];
     for (const entry of savedPlans) {
-      const payloadDoc = { ward: serviceArea, city: serviceArea, area: area || null, truckId: entry.assignedTruck, date: planDayStart, depot,
-        stops: (entry.plan.stops || []).map(stop => ({ ...stop, visited: Boolean(stop.visited) })),
-        loadKg: entry.plan.loadKg || 0, distanceKm: entry.plan.distanceKm || 0 };
+      const existingPlan = await RoutePlan.findOne({ city: serviceArea, area: area || null, truckId: entry.assignedTruck, date: { $gte: planDayStart, $lte: planDayEnd } }).lean();
+      
+      let visitedStops = [];
+      const visitedBinIds = new Set();
+      
+      if (existingPlan && existingPlan.stops) {
+        visitedStops = existingPlan.stops.filter(s => s.visited);
+        visitedStops.forEach(s => visitedBinIds.add(s.binId));
+      }
+
+      const newUnvisitedStops = (entry.plan.stops || [])
+        .filter(stop => !visitedBinIds.has(stop.binId))
+        .map(stop => ({ ...stop, visited: false }));
+
+      const orderedStops = [...visitedStops, ...newUnvisitedStops];
+
+      const payloadDoc = { 
+        ward: serviceArea, city: serviceArea, area: area || null, truckId: entry.assignedTruck, date: planDayStart, depot,
+        stops: orderedStops,
+        loadKg: entry.plan.loadKg || 0, distanceKm: entry.plan.distanceKm || 0 
+      };
+      
       const doc = await RoutePlan.findOneAndUpdate(
         { city: serviceArea, area: area || null, truckId: entry.assignedTruck, date: { $gte: planDayStart, $lte: planDayEnd } },
         { $set: payloadDoc }, { upsert: true, new: true, setDefaultsOnInsert: true });
@@ -144,6 +163,19 @@ exports.getTodayRoute = async (req, res) => {
   }
 };
 
+const EARTH_RADIUS_KM = 6371;
+const toRadians = degrees => (degrees * Math.PI) / 180;
+const haversineKm = (from, to) => {
+  if (!from || !to) return 0;
+  const dLat = toRadians((to.lat ?? 0) - (from.lat ?? 0));
+  const dLon = toRadians((to.lon ?? 0) - (from.lon ?? 0));
+  const lat1 = toRadians(from.lat ?? 0);
+  const lat2 = toRadians(to.lat ?? 0);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.asin(Math.sqrt(a));
+  return EARTH_RADIUS_KM * c;
+};
+
 exports.recordCollection = async (req, res) => {
   const payload = parseOrRespond(recordCollectionSchema, req.body || {}, res);
   if (!payload) return undefined;
@@ -151,11 +183,63 @@ exports.recordCollection = async (req, res) => {
     const assignedTruck = payload.truckId || DEFAULT_TRUCK_ID;
     const now = new Date();
     await CollectionEvent.create({ binId: payload.binId, truckId: assignedTruck, notes: payload.notes, ts: now });
-    const filter = { truckId: assignedTruck, date: { $gte: startOfDay(now), $lte: endOfDay(now) }, 'stops.binId': payload.binId };
-    await Promise.all([
-      RoutePlan.updateOne(filter, { $set: { 'stops.$.visited': true } }).exec(),
-      WasteBin.updateOne({ binId: payload.binId }, { $set: { lastPickupAt: now } }).exec(),
-    ]);
+    const filter = { 
+      truckId: assignedTruck, 
+      date: { $gte: startOfDay(now), $lte: endOfDay(now) },
+      'stops.binId': payload.binId 
+    };
+
+    const todayPlan = await RoutePlan.findOne(filter);
+    if (todayPlan && todayPlan.stops) {
+      const targetStop = todayPlan.stops.find(s => s.binId === payload.binId);
+      if (targetStop) {
+        targetStop.visited = true;
+
+        // DYNAMIC RE-ROUTING: Re-order unvisited stops based on nearest neighbor from this stop
+        const visitedStops = todayPlan.stops.filter(s => s.visited);
+        const unvisitedStops = todayPlan.stops.filter(s => !s.visited);
+
+        if (unvisitedStops.length > 0) {
+          let currentLocation = { lat: targetStop.lat, lon: targetStop.lon };
+          const reorderedUnvisited = [];
+
+          while (unvisitedStops.length > 0) {
+            let bestDistance = Infinity;
+            let bestIndex = 0;
+            for (let i = 0; i < unvisitedStops.length; i++) {
+              const distance = haversineKm(currentLocation, unvisitedStops[i]);
+              if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = i;
+              }
+            }
+            const nextStop = unvisitedStops[bestIndex];
+            reorderedUnvisited.push(nextStop);
+            currentLocation = { lat: nextStop.lat, lon: nextStop.lon };
+            unvisitedStops.splice(bestIndex, 1);
+          }
+
+          todayPlan.stops = [...visitedStops, ...reorderedUnvisited];
+        }
+
+        // Recalculate total distance based on the new exact sequence!
+        if (todayPlan.depot && todayPlan.depot.lat && todayPlan.depot.lon) {
+          let newTotalDistance = 0;
+          let prevLoc = todayPlan.depot;
+          for (const stop of todayPlan.stops) {
+            newTotalDistance += haversineKm(prevLoc, stop);
+            prevLoc = stop;
+          }
+          newTotalDistance += haversineKm(prevLoc, todayPlan.depot);
+          todayPlan.distanceKm = Number(newTotalDistance.toFixed(2));
+        }
+        
+        todayPlan.markModified('stops');
+        await todayPlan.save();
+      }
+    }
+
+    await WasteBin.updateOne({ binId: payload.binId }, { $set: { lastPickupAt: now } }).exec();
     // GAMIFICATION: Award points to collector for collecting a bin
     if (payload.collectorId) {
       try {

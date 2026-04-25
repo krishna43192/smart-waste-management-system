@@ -259,8 +259,6 @@ function DashboardSideNav({ collapsed, onToggle, activeSection, onNavigate }) {
         width,
         flexShrink: 0,
         transition: 'width 0.25s ease',
-        position: 'sticky',
-        top: NAV_TOP_OFFSET,
         alignSelf: 'flex-start',
       }}
     >
