@@ -1,6 +1,6 @@
 const { Schema, model, Types } = require('mongoose');
 
-const REQUEST_STATUSES = Object.freeze(['scheduled', 'cancelled', 'pending-payment', 'payment-failed']);
+const REQUEST_STATUSES = Object.freeze(['scheduled', 'cancelled', 'pending-payment', 'payment-failed', 'completed']);
 const PAYMENT_STATUSES = Object.freeze(['pending', 'success', 'failed', 'not-required']);
 
 const schemaOptions = {
