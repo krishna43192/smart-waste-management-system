@@ -3,6 +3,7 @@ const City = require('../../models/City');
 const WasteBin = require('../../models/WasteBin');
 const RoutePlan = require('../../models/RoutePlan');
 const CollectionEvent = require('../../models/CollectionEvent');
+const SpecialCollectionRequest = require('../../models/SpecialCollectionRequest');
 const lk = require('../../config/region.hyd.json');
 const { estimateKg, optimize } = require('./service.routing');
 
@@ -93,19 +94,50 @@ exports.optimizeRoute = async (req, res) => {
     const maxTimeHrs = Number(constraints.maxTimeHrs || constraints.maxTime || 0);
     const avgSpeedKph = adjustments?.avoidPeak ? 18 : 25;
     const totalBins = bins.length;
+    const planDate = date ? new Date(date) : new Date();
+    const planDayStart = startOfDay(planDate);
+    const planDayEnd = endOfDay(planDate);
+
+    // FETCH SPECIAL COLLECTIONS for this route
+    const specialRequests = await SpecialCollectionRequest.find({
+      district: serviceArea,
+      status: 'scheduled',
+      'slot.start': { $gte: planDayStart, $lte: planDayEnd }
+    }).lean();
+
+    const specialBins = specialRequests.map(req => {
+      // Mock location if not present, using a slight offset from the depot
+      const lat = req.location?.lat || depot.lat + (Math.random() - 0.5) * 0.05;
+      const lon = req.location?.lon || depot.lon + (Math.random() - 0.5) * 0.05;
+      const estKg = req.totalWeightKg || req.approxWeightKg || 50;
+      return {
+        binId: `SPL-${req._id}`,
+        city: serviceArea,
+        area: req.address || 'Special Pickup',
+        location: { lat, lon },
+        capacityKg: estKg,
+        estKg: estKg,
+        ratio: 1.0, // force high priority so they always get picked
+        isSpecial: true,
+        specialRequestId: req._id
+      };
+    });
+
     const enriched = bins.map(bin => {
       const capacity = Number(bin.capacityKg) || 240;
       const estKg = estimateKg(bin);
       const ratio = capacity > 0 ? estKg / capacity : 0;
       return { ...bin, estKg, ratio };
     });
-    const consideredBins = enriched.filter(b => b.ratio >= threshold);
-    const highPriorityBins = enriched.filter(b => b.ratio >= 0.6);
-    const plans = optimize({ bins, params: { depot, threshold, truckCapacityKg, trucks, maxTimeHrs, avgSpeedKph } });
+    
+    // Combine standard bins and special collections
+    const allEnriched = [...enriched, ...specialBins];
+
+    const consideredBins = allEnriched.filter(b => b.ratio >= threshold);
+    const highPriorityBins = allEnriched.filter(b => b.ratio >= 0.6);
+    const plans = optimize({ bins: allEnriched, params: { depot, threshold, truckCapacityKg, trucks, maxTimeHrs, avgSpeedKph } });
     const planList = Array.isArray(plans) ? plans : [plans];
-    const planDate = date ? new Date(date) : new Date();
-    const planDayStart = startOfDay(planDate);
-    const planDayEnd = endOfDay(planDate);
+    
     const savedPlans = [];
     planList.forEach((plan, index) => {
       const assignedTruck = index === 0 && truckId ? truckId : 'TRUCK-' + String(index + 1).padStart(2, '0');
@@ -239,7 +271,13 @@ exports.recordCollection = async (req, res) => {
       }
     }
 
-    await WasteBin.updateOne({ binId: payload.binId }, { $set: { lastPickupAt: now } }).exec();
+    if (payload.binId.startsWith('SPL-')) {
+      const specialId = payload.binId.replace('SPL-', '');
+      await SpecialCollectionRequest.updateOne({ _id: specialId }, { $set: { status: 'completed' } }).exec();
+    } else {
+      await WasteBin.updateOne({ binId: payload.binId }, { $set: { lastPickupAt: now } }).exec();
+    }
+    
     // GAMIFICATION: Award points to collector for collecting a bin
     if (payload.collectorId) {
       try {

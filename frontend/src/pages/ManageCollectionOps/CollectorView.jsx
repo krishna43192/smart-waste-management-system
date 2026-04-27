@@ -214,6 +214,8 @@ export default function CollectorView() {
                   )}
                   {/* ✅ UPDATED: Show points earned message when synced */}
                   {isVisited && <span className="ml-auto text-xs font-semibold text-emerald-600">✓ synced +10pts</span>}
+                  {/* ✅ UPDATED: Show points earned message when synced */}
+                  {isVisited && <span className="ml-auto text-xs font-semibold text-emerald-600">✓ synced +10pts</span>}
                 </li>
               )
             })}

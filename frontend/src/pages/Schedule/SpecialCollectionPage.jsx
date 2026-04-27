@@ -49,6 +49,7 @@ const REQUEST_STATUSES = {
   cancelled: { label: 'Cancelled', color: 'default' },
   'pending-payment': { label: 'Pending payment', color: 'warning' },
   'payment-failed': { label: 'Payment failed', color: 'error' },
+  completed: { label: 'Completed', color: 'info' },
 }
 
 const PAYMENT_STATUSES = {
@@ -227,7 +228,18 @@ function RequestForm({
                 <TextField label="Address" name="address" value={form.address} onChange={onChange} onBlur={onBlur} required fullWidth multiline minRows={2} error={Boolean(touched.address && errors.address)} helperText={touched.address && errors.address} />
               </Grid>
               <Grid item xs={12} md={6}>
-                <TextField label="District" name="district" value={form.district} onChange={onChange} onBlur={onBlur} required fullWidth error={Boolean(touched.district && errors.district)} helperText={touched.district && errors.district} />
+                <FormControl fullWidth required error={Boolean(touched.district && errors.district)}>
+                  <InputLabel id="zone-label">Zone</InputLabel>
+                  <Select labelId="zone-label" name="district" label="Zone" value={form.district} onChange={onChange} onBlur={onBlur}>
+                    <MenuItem value="Secunderabad">Secunderabad</MenuItem>
+                    <MenuItem value="Kukatpally">Kukatpally</MenuItem>
+                    <MenuItem value="LB Nagar">LB Nagar</MenuItem>
+                    <MenuItem value="Charminar">Charminar</MenuItem>
+                    <MenuItem value="Serilingampally">Serilingampally</MenuItem>
+                    <MenuItem value="Khairatabad">Khairatabad</MenuItem>
+                  </Select>
+                  {touched.district && errors.district && <Typography variant="caption" color="error" sx={{ ml: 1.5, mt: 0.5 }}>{errors.district}</Typography>}
+                </FormControl>
               </Grid>
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth required>
@@ -547,7 +559,7 @@ function ConfirmationPanel({ details, allowedItems }) {
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}><Typography variant="subtitle2" color="text.secondary">Address:</Typography><Typography variant="h6" fontWeight={600}>{details.request.address || '—'}</Typography></Grid>
-              <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">District:</Typography><Typography variant="h6" fontWeight={600}>{details.request.district || '—'}</Typography></Grid>
+              <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Zone:</Typography><Typography variant="h6" fontWeight={600}>{details.request.district || '—'}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Item type:</Typography><Typography variant="h6" fontWeight={600}>{itemLabel}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Phone:</Typography><Typography variant="h6" fontWeight={600}>{details.request.phone || '—'}</Typography></Grid>
               <Grid item xs={6}><Typography variant="subtitle2" color="text.secondary">Email:</Typography><Typography variant="h6" fontWeight={600}>{details.request.email || '—'}</Typography></Grid>
@@ -649,7 +661,7 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
     else if (!emailRegex.test(form.email)) errs.email = 'Enter a valid email address'
     if (!form.phone?.trim()) errs.phone = 'Phone number is required'
     if (!form.address?.trim()) errs.address = 'Address is required'
-    if (!form.district?.trim()) errs.district = 'District is required'
+    if (!form.district?.trim()) errs.district = 'Zone is required'
     if (!form.itemType) errs.itemType = 'Item type is required'
     if (!form.preferredDate) errs.preferredDate = 'Date is required'
     if (!form.preferredTime) errs.preferredTime = 'Time is required'
@@ -693,7 +705,7 @@ export default function SpecialCollectionPage({ session, onSessionInvalid }) {
       { field: 'residentName', label: 'resident name', validate: v => Boolean(v?.trim()) },
       { field: 'ownerName', label: "owner's name", validate: v => Boolean(v?.trim()) },
       { field: 'address', label: 'address', validate: v => Boolean(v?.trim()) },
-      { field: 'district', label: 'district', validate: v => Boolean(v?.trim()) },
+      { field: 'district', label: 'zone', validate: v => Boolean(v?.trim()) },
       { field: 'email', label: 'email', validate: v => Boolean(v?.trim()) },
       { field: 'phone', label: 'phone number', validate: v => Boolean(v?.trim()) },
       { field: 'itemType', label: 'item type', validate: v => Boolean(v) },
